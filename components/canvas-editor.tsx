@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { LayersPanel } from "@/components/layers-panel"
@@ -43,7 +43,7 @@ export function CanvasEditor() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
 
-  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow">("select")
+  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split">("select")
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -66,7 +66,14 @@ export function CanvasEditor() {
 
       let latestRect = { x: startX, y: startY, width: 0, height: 0 }
 
-      const colorHex = activeTool === "rect-red" ? "#ef4444" : activeTool === "rect-green" ? "#22c55e" : "#eab308"
+      const colorHex =
+        activeTool === "rect-red"
+          ? "#ef4444"
+          : activeTool === "rect-green"
+            ? "#22c55e"
+            : activeTool === "rect-yellow"
+              ? "#eab308"
+              : "#0ea5e9" // blue-500 for split tool
       previewEl.style.display = "block"
       previewEl.style.borderColor = colorHex
       previewEl.style.left = `${startX}px`
@@ -101,30 +108,131 @@ export function CanvasEditor() {
         previewEl.style.display = "none"
 
         if (latestRect.width > 5 && latestRect.height > 5) {
-          const colorName = activeTool === "rect-red" ? "red" : activeTool === "rect-green" ? "green" : "yellow"
-          const colorHex = activeTool === "rect-red" ? "#ef4444" : activeTool === "rect-green" ? "#22c55e" : "#eab308"
-          
-          const src = createBorderRectangleDataURL(latestRect.width, latestRect.height, colorHex, 5)
-          
-          const newLayer: Layer = {
-            id: createId(),
-            src,
-            name: `${colorName.charAt(0).toUpperCase() + colorName.slice(1)} Rectangle`,
-            x: latestRect.x,
-            y: latestRect.y,
-            width: latestRect.width,
-            height: latestRect.height,
-            naturalWidth: latestRect.width,
-            naturalHeight: latestRect.height,
-            visible: true,
-          }
+          if (activeTool === "split") {
+            let targetLayer = layers.find((l) => l.id === selectedId)
+            if (!targetLayer) {
+              for (let i = layers.length - 1; i >= 0; i--) {
+                const l = layers[i]
+                if (!l.visible) continue
+                const intersectX = Math.max(l.x, latestRect.x)
+                const intersectY = Math.max(l.y, latestRect.y)
+                const intersectRight = Math.min(l.x + l.width, latestRect.x + latestRect.width)
+                const intersectBottom = Math.min(l.y + l.height, latestRect.y + latestRect.height)
+                if (intersectRight > intersectX && intersectBottom > intersectY) {
+                  targetLayer = l
+                  break
+                }
+              }
+            }
 
-          setHistory((prev) => ({
-            past: [...prev.past, prev.present],
-            present: [...prev.present, newLayer],
-            future: [],
-          }))
-          setSelectedId(newLayer.id)
+            if (targetLayer) {
+              const layerToSplit = targetLayer
+              const img = new Image()
+              img.crossOrigin = "anonymous"
+              img.onload = () => {
+                const intersectX = Math.max(layerToSplit.x, latestRect.x)
+                const intersectY = Math.max(layerToSplit.y, latestRect.y)
+                const intersectRight = Math.min(layerToSplit.x + layerToSplit.width, latestRect.x + latestRect.width)
+                const intersectBottom = Math.min(layerToSplit.y + layerToSplit.height, latestRect.y + latestRect.height)
+
+                const intersectW = intersectRight - intersectX
+                const intersectH = intersectBottom - intersectY
+
+                if (intersectW <= 5 || intersectH <= 5) return
+
+                const scaleX = layerToSplit.naturalWidth / layerToSplit.width
+                const scaleY = layerToSplit.naturalHeight / layerToSplit.height
+
+                const srcX = (intersectX - layerToSplit.x) * scaleX
+                const srcY = (intersectY - layerToSplit.y) * scaleY
+                const srcW = intersectW * scaleX
+                const srcH = intersectH * scaleY
+
+                // 1. Crop canvas
+                const cropCanvas = document.createElement("canvas")
+                cropCanvas.width = srcW
+                cropCanvas.height = srcH
+                const cropCtx = cropCanvas.getContext("2d")
+                if (cropCtx) {
+                  cropCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH)
+                }
+                const croppedPartSrc = cropCanvas.toDataURL()
+
+                // 2. Original canvas (remove cropped portion)
+                const origCanvas = document.createElement("canvas")
+                origCanvas.width = layerToSplit.naturalWidth
+                origCanvas.height = layerToSplit.naturalHeight
+                const origCtx = origCanvas.getContext("2d")
+                if (origCtx) {
+                  origCtx.drawImage(img, 0, 0)
+                  origCtx.clearRect(srcX, srcY, srcW, srcH)
+                }
+                const updatedOriginalSrc = origCanvas.toDataURL()
+
+                const newLayerId = createId()
+                const newLayer: Layer = {
+                  id: newLayerId,
+                  src: croppedPartSrc,
+                  name: `${layerToSplit.name} (Split)`,
+                  x: intersectX,
+                  y: intersectY,
+                  width: intersectW,
+                  height: intersectH,
+                  naturalWidth: srcW,
+                  naturalHeight: srcH,
+                  visible: true,
+                }
+
+                setHistory((prev) => {
+                  const updatedPresent = prev.present.map((l) => {
+                    if (l.id === layerToSplit.id) {
+                      return { ...l, src: updatedOriginalSrc }
+                    }
+                    return l
+                  })
+                  const targetIdx = updatedPresent.findIndex((l) => l.id === layerToSplit.id)
+                  const nextPresent = [...updatedPresent]
+                  if (targetIdx !== -1) {
+                    nextPresent.splice(targetIdx + 1, 0, newLayer)
+                  } else {
+                    nextPresent.push(newLayer)
+                  }
+                  return {
+                    past: [...prev.past, prev.present],
+                    present: nextPresent,
+                    future: [],
+                  }
+                })
+                setSelectedId(newLayerId)
+              }
+              img.src = layerToSplit.src
+            }
+          } else {
+            const colorName = activeTool === "rect-red" ? "red" : activeTool === "rect-green" ? "green" : "yellow"
+            const colorHex = activeTool === "rect-red" ? "#ef4444" : activeTool === "rect-green" ? "#22c55e" : "#eab308"
+
+            const src = createBorderRectangleDataURL(latestRect.width, latestRect.height, colorHex, 5)
+
+            const newLayer: Layer = {
+              id: createId(),
+              src,
+              name: `${colorName.charAt(0).toUpperCase() + colorName.slice(1)} Rectangle`,
+              x: latestRect.x,
+              y: latestRect.y,
+              width: latestRect.width,
+              height: latestRect.height,
+              naturalWidth: latestRect.width,
+              naturalHeight: latestRect.height,
+              visible: true,
+            }
+
+            setHistory((prev) => ({
+              past: [...prev.past, prev.present],
+              present: [...prev.present, newLayer],
+              future: [],
+            }))
+            setSelectedId(newLayer.id)
+          }
         }
 
         setActiveTool("select")
@@ -133,7 +241,7 @@ export function CanvasEditor() {
       window.addEventListener("pointermove", handlePointerMove)
       window.addEventListener("pointerup", handlePointerUp)
     },
-    [activeTool, scale],
+    [activeTool, scale, layers, selectedId],
   )
 
   const undo = useCallback(() => {
@@ -446,6 +554,19 @@ export function CanvasEditor() {
               title="Yellow Rectangle Tool"
             >
               <Square className="h-4 w-4 text-yellow-500 fill-yellow-500/20" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7",
+                activeTool === "split" ? "bg-accent text-foreground" : "text-muted-foreground",
+              )}
+              onClick={() => setActiveTool("split")}
+              aria-label="Split Image Tool"
+              title="Split Image Tool"
+            >
+              <Scissors className="h-4 w-4 text-sky-500 fill-sky-500/20" />
             </Button>
           </div>
 
