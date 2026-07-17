@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2 } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { LayersPanel } from "@/components/layers-panel"
@@ -26,7 +26,15 @@ function createBorderRectangleDataURL(width: number, height: number, color: stri
   return canvas.toDataURL()
 }
 
-export function CanvasEditor() {
+interface CanvasEditorProps {
+  splitDirection?: "horizontal" | "vertical"
+  onToggleSplitDirection?: () => void
+}
+
+export function CanvasEditor({
+  splitDirection = "horizontal",
+  onToggleSplitDirection,
+}: CanvasEditorProps) {
   const [history, setHistory] = useState<{
     past: Layer[][]
     present: Layer[]
@@ -584,6 +592,25 @@ export function CanvasEditor() {
               <Maximize className="h-4 w-4" />
             </Button>
           </div>
+
+          {onToggleSplitDirection && (
+            <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-foreground"
+                onClick={onToggleSplitDirection}
+                aria-label={splitDirection === "horizontal" ? "Switch to vertical layout" : "Switch to horizontal layout"}
+                title={splitDirection === "horizontal" ? "Switch to vertical layout" : "Switch to horizontal layout"}
+              >
+                {splitDirection === "horizontal" ? (
+                  <Rows2 className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Columns2 className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+          )}
 
           <Button
             variant="ghost"
