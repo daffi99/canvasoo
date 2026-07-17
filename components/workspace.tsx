@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 export function Workspace() {
   const [leftWidth, setLeftWidth] = useState(70) // percentage
-  const [splitDirection, setSplitDirection] = useState<"horizontal" | "vertical">("horizontal")
+  const [splitDirection, setSplitDirection] = useState<"horizontal" | "vertical">("vertical")
   const [isNotepadCollapsed, setIsNotepadCollapsed] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const lastWidthRef = useRef(70)

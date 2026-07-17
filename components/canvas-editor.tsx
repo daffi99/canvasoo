@@ -47,7 +47,7 @@ export function CanvasEditor({
   const layers = history.present
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [scale, setScale] = useState(0.4)
+  const [scale, setScale] = useState(0.6)
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
 
