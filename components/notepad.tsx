@@ -34,7 +34,7 @@ export function Notepad() {
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "focus:outline-none min-h-[calc(100dvh-12rem)] text-sm text-foreground px-8 pb-16 outline-none",
+        class: "focus:outline-none min-h-[150px] text-sm text-foreground px-8 pb-16 outline-none",
       },
     },
   })
