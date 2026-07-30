@@ -58,19 +58,21 @@ export function CanvasEditor({
   const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
 
   const handleExportCanvas = useCallback(() => {
+    const EXPORT_W = 1920
+    const EXPORT_H = 1080
     const canvas = document.createElement("canvas")
-    canvas.width = CANVAS_SIZE
-    canvas.height = CANVAS_SIZE
+    canvas.width = EXPORT_W
+    canvas.height = EXPORT_H
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
     ctx.fillStyle = "#ffffff"
-    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+    ctx.fillRect(0, 0, EXPORT_W, EXPORT_H)
 
     const visibleLayers = layers.filter((l) => l.visible)
     if (visibleLayers.length === 0) {
       const link = document.createElement("a")
-      link.download = `canvas-2000x2000-${Date.now()}.png`
+      link.download = `canvas-1920x1080-${Date.now()}.png`
       link.href = canvas.toDataURL("image/png")
       link.click()
       return
@@ -93,7 +95,7 @@ export function CanvasEditor({
             }
           })
           const link = document.createElement("a")
-          link.download = `canvas-2000x2000-${Date.now()}.png`
+          link.download = `canvas-1920x1080-${Date.now()}.png`
           link.href = canvas.toDataURL("image/png")
           link.click()
         }
@@ -626,9 +628,9 @@ export function CanvasEditor({
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCanvas} title="Export full 2000×2000 canvas as PNG">
+          <Button variant="outline" size="sm" onClick={handleExportCanvas} title="Export top-left 1920×1080 area as PNG">
             <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export (2000×2000)</span>
+            <span className="hidden sm:inline">Export (1920×1080)</span>
           </Button>
           <div className="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground md:flex">
             <ClipboardPaste className="h-3.5 w-3.5" />
