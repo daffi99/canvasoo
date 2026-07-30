@@ -47,7 +47,29 @@ export function CanvasEditor({
   })
   const layers = history.present
 
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectedId = selectedIds[0] ?? null
+
+  const handleSelectLayer = useCallback((id: string, e?: React.PointerEvent | React.MouseEvent) => {
+    if (e && (e.shiftKey || e.metaKey || e.ctrlKey)) {
+      setSelectedIds((prev) =>
+        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      )
+    } else {
+      setSelectedIds((prev) => (prev.includes(id) ? prev : [id]))
+    }
+  }, [])
+
+  const handleBatchChange = useCallback((updates: Array<{ id: string; patch: Partial<Layer> }>) => {
+    const patchMap = new Map(updates.map((u) => [u.id, u.patch]))
+    setHistory((prev) => ({
+      ...prev,
+      present: prev.present.map((l) => {
+        const patch = patchMap.get(l.id)
+        return patch ? { ...l, ...patch } : l
+      }),
+    }))
+  }, [])
   const [scale, setScale] = useState(0.55)
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
@@ -211,7 +233,74 @@ export function CanvasEditor({
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (activeTool === "select") return
+      if (activeTool === "select") {
+        e.stopPropagation()
+        const canvasEl = canvasRef.current
+        const previewEl = drawingPreviewRef.current
+        if (!canvasEl || !previewEl) return
+
+        const rect = canvasEl.getBoundingClientRect()
+        const startX = Math.round((e.clientX - rect.left) / scale)
+        const startY = Math.round((e.clientY - rect.top) / scale)
+
+        let latestRect = { x: startX, y: startY, width: 0, height: 0 }
+
+        previewEl.style.display = "block"
+        previewEl.style.borderColor = "#0ea5e9"
+        previewEl.style.backgroundColor = "rgba(14, 165, 233, 0.15)"
+        previewEl.style.borderStyle = "dashed"
+        previewEl.style.left = `${startX}px`
+        previewEl.style.top = `${startY}px`
+        previewEl.style.width = "0px"
+        previewEl.style.height = "0px"
+
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+          const currentX = Math.round((moveEvent.clientX - rect.left) / scale)
+          const currentY = Math.round((moveEvent.clientY - rect.top) / scale)
+
+          const x = Math.min(startX, currentX)
+          const y = Math.min(startY, currentY)
+          const width = Math.abs(startX - currentX)
+          const height = Math.abs(startY - currentY)
+
+          latestRect = { x, y, width, height }
+
+          previewEl.style.left = `${x}px`
+          previewEl.style.top = `${y}px`
+          previewEl.style.width = `${width}px`
+          previewEl.style.height = `${height}px`
+        }
+
+        const handlePointerUp = () => {
+          window.removeEventListener("pointermove", handlePointerMove)
+          window.removeEventListener("pointerup", handlePointerUp)
+
+          previewEl.style.display = "none"
+          previewEl.style.backgroundColor = "transparent"
+
+          if (latestRect.width > 5 && latestRect.height > 5) {
+            const mX = latestRect.x
+            const mY = latestRect.y
+            const mW = latestRect.width
+            const mH = latestRect.height
+
+            const matched = layers.filter((l) => {
+              if (!l.visible) return false
+              return l.x < mX + mW && l.x + l.width > mX && l.y < mY + mH && l.y + l.height > mY
+            })
+
+            setSelectedIds(matched.map((l) => l.id))
+          } else {
+            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+              setSelectedIds([])
+            }
+          }
+        }
+
+        window.addEventListener("pointermove", handlePointerMove)
+        window.addEventListener("pointerup", handlePointerUp)
+        return
+      }
       e.stopPropagation()
       const canvasEl = canvasRef.current
       const previewEl = drawingPreviewRef.current
@@ -388,7 +477,7 @@ export function CanvasEditor({
               present: [...prev.present, newLayer],
               future: [],
             }))
-            setSelectedId(newLayer.id)
+            setSelectedIds([newLayer.id])
           }
         }
 
@@ -462,7 +551,7 @@ export function CanvasEditor({
         present: [...prev.present, layer],
         future: [],
       }))
-      setSelectedId(layer.id)
+      setSelectedIds([layer.id])
     }
     img.src = src
   }, [])
@@ -531,15 +620,20 @@ export function CanvasEditor({
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedIds.length > 0) {
         e.preventDefault()
-        deleteLayer(selectedId)
+        const toDelete = new Set(selectedIds)
+        setHistory((prev) => ({
+          past: [...prev.past, prev.present],
+          present: prev.present.filter((l) => !toDelete.has(l.id)),
+          future: [],
+        }))
+        setSelectedIds([])
       }
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [selectedIds])
 
   function updateLayer(id: string, patch: Partial<Layer>) {
     setHistory((prev) => ({
@@ -549,12 +643,13 @@ export function CanvasEditor({
   }
 
   function deleteLayer(id: string) {
+    const idsToDelete = selectedIds.includes(id) ? new Set(selectedIds) : new Set([id])
     setHistory((prev) => ({
       past: [...prev.past, prev.present],
-      present: prev.present.filter((l) => l.id !== id),
+      present: prev.present.filter((l) => !idsToDelete.has(l.id)),
       future: [],
     }))
-    setSelectedId((cur) => (cur === id ? null : cur))
+    setSelectedIds((prev) => prev.filter((i) => !idsToDelete.has(i)))
   }
 
   function toggleVisible(id: string) {
@@ -774,7 +869,7 @@ export function CanvasEditor({
                 present: [],
                 future: [],
               }))
-              setSelectedId(null)
+              setSelectedIds([])
             }}
             disabled={layers.length === 0}
             className="text-muted-foreground hover:text-destructive"
@@ -818,12 +913,15 @@ export function CanvasEditor({
                   <CanvasLayer
                     key={layer.id}
                     layer={layer}
-                    selected={layer.id === selectedId}
+                    selected={selectedIds.includes(layer.id)}
                     scale={scale}
                     others={layers.filter((l) => l.id !== layer.id)}
+                    allLayers={layers}
+                    selectedIds={selectedIds}
                     userGuidelines={userGuidelines}
-                    onSelect={setSelectedId}
+                    onSelect={handleSelectLayer}
                     onChange={updateLayer}
+                    onBatchChange={handleBatchChange}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onGuides={setGuides}
@@ -901,7 +999,8 @@ export function CanvasEditor({
           <LayersPanel
             layers={layers}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            onSelect={handleSelectLayer}
             onToggleVisible={toggleVisible}
             onDelete={deleteLayer}
             onMove={moveLayer}

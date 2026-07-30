@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils"
 interface LayersPanelProps {
   layers: Layer[]
   selectedId: string | null
-  onSelect: (id: string) => void
+  selectedIds?: string[]
+  onSelect: (id: string, e?: React.MouseEvent) => void
   onToggleVisible: (id: string) => void
   onDelete: (id: string) => void
   onMove: (id: string, dir: "up" | "down") => void
@@ -17,6 +18,7 @@ interface LayersPanelProps {
 export function LayersPanel({
   layers,
   selectedId,
+  selectedIds = [],
   onSelect,
   onToggleVisible,
   onDelete,
@@ -46,13 +48,13 @@ export function LayersPanel({
       ) : (
         <ul className="flex-1 overflow-y-auto p-2">
           {ordered.map((layer) => {
-            const isSelected = layer.id === selectedId
+            const isSelected = selectedIds.length > 0 ? selectedIds.includes(layer.id) : layer.id === selectedId
             return (
               <li key={layer.id}>
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => onSelect(layer.id)}
+                  onClick={(e) => onSelect(layer.id, e)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()

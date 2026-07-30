@@ -10,9 +10,12 @@ interface CanvasLayerProps {
   selected: boolean
   scale: number
   others: Layer[]
+  allLayers?: Layer[]
+  selectedIds?: string[]
   userGuidelines?: Array<{ id: string; type: "horizontal" | "vertical"; position: number }>
-  onSelect: (id: string) => void
+  onSelect: (id: string, e?: React.PointerEvent) => void
   onChange: (id: string, patch: Partial<Layer>) => void
+  onBatchChange?: (updates: Array<{ id: string; patch: Partial<Layer> }>) => void
   onDragStart?: () => void
   onDragEnd?: () => void
   onGuides: (guides: { x: number[]; y: number[] }) => void
@@ -28,9 +31,12 @@ export function CanvasLayer({
   selected,
   scale,
   others,
+  allLayers = [],
+  selectedIds = [],
   userGuidelines = [],
   onSelect,
   onChange,
+  onBatchChange,
   onDragStart,
   onDragEnd,
   onGuides,
@@ -44,6 +50,7 @@ export function CanvasLayer({
     origW: number
     origH: number
     ratio: number
+    otherSelectedOrigs: Array<{ id: string; x: number; y: number }>
     targetsX: number[]
     targetsY: number[]
     moved: boolean
@@ -83,8 +90,14 @@ export function CanvasLayer({
 
   function handlePointerDown(e: React.PointerEvent, mode: DragMode) {
     e.stopPropagation()
-    onSelect(layer.id)
+    onSelect(layer.id, e)
     const { xs, ys } = buildTargets()
+
+    const otherSelected =
+      mode === "move" && selectedIds && selectedIds.length > 1 && selectedIds.includes(layer.id) && allLayers
+        ? allLayers.filter((l) => selectedIds.includes(l.id) && l.id !== layer.id)
+        : []
+
     stateRef.current = {
       mode,
       startX: e.clientX,
@@ -94,6 +107,7 @@ export function CanvasLayer({
       origW: layer.width,
       origH: layer.height,
       ratio: layer.width / layer.height,
+      otherSelectedOrigs: otherSelected.map((l) => ({ id: l.id, x: l.x, y: l.y })),
       targetsX: xs,
       targetsY: ys,
       moved: false,
@@ -131,7 +145,21 @@ export function CanvasLayer({
         activeY.push(snapY.guide)
       }
 
-      onChange(layer.id, { x: nx, y: ny })
+      const deltaX = nx - s.origX
+      const deltaY = ny - s.origY
+
+      if (s.otherSelectedOrigs && s.otherSelectedOrigs.length > 0 && onBatchChange) {
+        const updates = [
+          { id: layer.id, patch: { x: nx, y: ny } },
+          ...s.otherSelectedOrigs.map((o) => ({
+            id: o.id,
+            patch: { x: Math.round(o.x + deltaX), y: Math.round(o.y + deltaY) },
+          })),
+        ]
+        onBatchChange(updates)
+      } else {
+        onChange(layer.id, { x: nx, y: ny })
+      }
     } else {
       // Resize from bottom-right, aspect ratio locked.
       let nextW = Math.max(24, Math.round(s.origW + dx))
