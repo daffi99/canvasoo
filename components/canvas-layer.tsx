@@ -10,6 +10,7 @@ interface CanvasLayerProps {
   selected: boolean
   scale: number
   others: Layer[]
+  userGuidelines?: Array<{ id: string; type: "horizontal" | "vertical"; position: number }>
   onSelect: (id: string) => void
   onChange: (id: string, patch: Partial<Layer>) => void
   onDragStart?: () => void
@@ -27,6 +28,7 @@ export function CanvasLayer({
   selected,
   scale,
   others,
+  userGuidelines = [],
   onSelect,
   onChange,
   onDragStart,
@@ -52,6 +54,10 @@ export function CanvasLayer({
   function buildTargets() {
     const xs = [0, CANVAS_SIZE / 2, CANVAS_SIZE]
     const ys = [0, CANVAS_SIZE / 2, CANVAS_SIZE]
+    for (const g of userGuidelines) {
+      if (g.type === "vertical") xs.push(g.position)
+      else if (g.type === "horizontal") ys.push(g.position)
+    }
     for (const o of others) {
       if (!o.visible) continue
       xs.push(o.x, o.x + o.width / 2, o.x + o.width)

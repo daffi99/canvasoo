@@ -2,9 +2,10 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2 } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
+import { CanvasRuler } from "@/components/canvas-ruler"
 import { LayersPanel } from "@/components/layers-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -50,6 +51,99 @@ export function CanvasEditor({
   const [scale, setScale] = useState(0.6)
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
+  const [userGuidelines, setUserGuidelines] = useState<Array<{ id: string; type: "horizontal" | "vertical"; position: number }>>([])
+
+  const handleExportCanvas = useCallback(() => {
+    const canvas = document.createElement("canvas")
+    canvas.width = CANVAS_SIZE
+    canvas.height = CANVAS_SIZE
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE)
+
+    const visibleLayers = layers.filter((l) => l.visible)
+    if (visibleLayers.length === 0) {
+      const link = document.createElement("a")
+      link.download = `canvas-2000x2000-${Date.now()}.png`
+      link.href = canvas.toDataURL("image/png")
+      link.click()
+      return
+    }
+
+    let loadedCount = 0
+    const images: { img: HTMLImageElement; layer: Layer }[] = []
+
+    visibleLayers.forEach((layer) => {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.onload = () => {
+        images.push({ img, layer })
+        loadedCount++
+        if (loadedCount === visibleLayers.length) {
+          visibleLayers.forEach((l) => {
+            const found = images.find((item) => item.layer.id === l.id)
+            if (found) {
+              ctx.drawImage(found.img, l.x, l.y, l.width, l.height)
+            }
+          })
+          const link = document.createElement("a")
+          link.download = `canvas-2000x2000-${Date.now()}.png`
+          link.href = canvas.toDataURL("image/png")
+          link.click()
+        }
+      }
+      img.src = layer.src
+    })
+  }, [layers])
+
+  const handleCreateGuideline = useCallback((type: "horizontal" | "vertical", initialPosition: number) => {
+    setUserGuidelines((prev) => [
+      ...prev,
+      {
+        id: createId(),
+        type,
+        position: initialPosition,
+      },
+    ])
+  }, [])
+
+  const handleDragGuideline = useCallback(
+    (id: string, type: "horizontal" | "vertical", e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const canvasEl = canvasRef.current
+      if (!canvasEl) return
+      const rect = canvasEl.getBoundingClientRect()
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        let newPos = 0
+        if (type === "horizontal") {
+          newPos = Math.round((moveEvent.clientY - rect.top) / scale)
+        } else {
+          newPos = Math.round((moveEvent.clientX - rect.left) / scale)
+        }
+
+        if (newPos < -30 || newPos > CANVAS_SIZE + 30) {
+          setUserGuidelines((prev) => prev.filter((g) => g.id !== id))
+        } else {
+          setUserGuidelines((prev) =>
+            prev.map((g) => (g.id === id ? { ...g, position: Math.max(0, Math.min(CANVAS_SIZE, newPos)) } : g))
+          )
+        }
+      }
+
+      const handlePointerUp = () => {
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+      }
+
+      window.addEventListener("pointermove", handlePointerMove)
+      window.addEventListener("pointerup", handlePointerUp)
+    },
+    [scale],
+  )
 
   const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split">("select")
 
@@ -479,6 +573,10 @@ export function CanvasEditor({
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>
           </Button>
+          <Button variant="outline" size="sm" onClick={handleExportCanvas} title="Export full 2000×2000 canvas as PNG">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export (2000×2000)</span>
+          </Button>
           <div className="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground md:flex">
             <ClipboardPaste className="h-3.5 w-3.5" />
             Paste with Ctrl/Cmd + V
@@ -645,11 +743,12 @@ export function CanvasEditor({
           onDragLeave={() => setIsDragOver(false)}
           onDrop={onDrop}
         >
-          <div style={{ width: CANVAS_SIZE * scale, height: CANVAS_SIZE * scale }}>
+          <div style={{ width: CANVAS_SIZE * scale + 20, height: CANVAS_SIZE * scale + 20, position: "relative" }}>
+            <CanvasRuler scale={scale} onCreateGuideline={handleCreateGuideline} />
             <div
               ref={canvasRef}
               className={cn(
-                "relative origin-top-left bg-background shadow-sm ring-1 ring-border",
+                "absolute top-[20px] left-[20px] origin-top-left bg-background shadow-sm ring-1 ring-border",
                 activeTool !== "select" ? "cursor-crosshair" : "cursor-default",
               )}
               style={{
@@ -667,6 +766,7 @@ export function CanvasEditor({
                     selected={layer.id === selectedId}
                     scale={scale}
                     others={layers.filter((l) => l.id !== layer.id)}
+                    userGuidelines={userGuidelines}
                     onSelect={setSelectedId}
                     onChange={updateLayer}
                     onDragStart={handleDragStart}
@@ -675,6 +775,26 @@ export function CanvasEditor({
                   />
                 ))}
               </div>
+
+              {/* User Created Figma Guidelines */}
+              {userGuidelines.map((g) => (
+                <div
+                  key={g.id}
+                  className={cn(
+                    "absolute z-40 touch-none select-none",
+                    g.type === "horizontal"
+                      ? "left-0 w-full cursor-ns-resize border-t-2 border-dashed border-cyan-400 hover:border-cyan-300"
+                      : "top-0 h-full cursor-ew-resize border-l-2 border-dashed border-cyan-400 hover:border-cyan-300"
+                  )}
+                  style={
+                    g.type === "horizontal"
+                      ? { top: g.position, height: 0 }
+                      : { left: g.position, width: 0 }
+                  }
+                  onPointerDown={(e) => handleDragGuideline(g.id, g.type, e)}
+                  title={`${g.type === "horizontal" ? "Y" : "X"}: ${g.position}px (Drag to move, drag off canvas to delete)`}
+                />
+              ))}
 
               {/* Drawing Rectangle Preview */}
               <div
