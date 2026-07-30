@@ -246,8 +246,8 @@ export function CanvasEditor({
         let latestRect = { x: startX, y: startY, width: 0, height: 0 }
 
         previewEl.style.display = "block"
-        previewEl.style.borderColor = "#0ea5e9"
-        previewEl.style.backgroundColor = "rgba(14, 165, 233, 0.15)"
+        previewEl.style.borderColor = "#0f172a"
+        previewEl.style.backgroundColor = "rgba(15, 23, 42, 0.12)"
         previewEl.style.borderStyle = "dashed"
         previewEl.style.left = `${startX}px`
         previewEl.style.top = `${startY}px`
@@ -449,7 +449,7 @@ export function CanvasEditor({
                     future: [],
                   }
                 })
-                setSelectedId(newLayerId)
+                setSelectedIds([newLayerId])
               }
               img.src = layerToSplit.src
             }
@@ -885,7 +885,7 @@ export function CanvasEditor({
         <main
           ref={viewportRef}
           className="relative flex-1 overflow-auto bg-canvas p-6"
-          onPointerDown={() => setSelectedId(null)}
+          onPointerDown={() => setSelectedIds([])}
           onDragOver={(e) => {
             e.preventDefault()
             setIsDragOver(true)
