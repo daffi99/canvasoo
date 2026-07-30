@@ -51,7 +51,10 @@ export function CanvasEditor({
   const [scale, setScale] = useState(0.6)
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
-  const [userGuidelines, setUserGuidelines] = useState<Array<{ id: string; type: "horizontal" | "vertical"; position: number }>>([])
+  const [userGuidelines, setUserGuidelines] = useState<Array<{ id: string; type: "horizontal" | "vertical"; position: number }>>([
+    { id: "init-v-1920", type: "vertical", position: 1920 },
+    { id: "init-h-1080", type: "horizontal", position: 1080 },
+  ])
   const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
 
   const handleExportCanvas = useCallback(() => {
@@ -845,9 +848,9 @@ export function CanvasEditor({
                 >
                   <div
                     className={cn(
-                      "absolute bg-cyan-600 text-white text-[10px] font-mono font-medium px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap transition-opacity",
-                      draggingGuidelineId === g.id ? "opacity-100 scale-100 z-50" : "opacity-0 group-hover:opacity-100",
-                      g.type === "horizontal" ? "left-4 -top-6" : "top-4 left-2"
+                      "absolute bg-slate-900/90 text-cyan-300 border border-cyan-400/50 text-xs sm:text-sm font-mono font-bold px-2.5 py-1 rounded-md shadow-xl pointer-events-none whitespace-nowrap transition-opacity backdrop-blur-sm",
+                      draggingGuidelineId === g.id ? "opacity-100 scale-105 z-50 ring-2 ring-cyan-400" : "opacity-0 group-hover:opacity-100",
+                      g.type === "horizontal" ? "left-6 -top-9" : "top-6 left-3"
                     )}
                   >
                     {g.type === "horizontal" ? `Y: ${g.position}px` : `X: ${g.position}px`}
