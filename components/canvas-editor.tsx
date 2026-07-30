@@ -52,6 +52,7 @@ export function CanvasEditor({
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
   const [userGuidelines, setUserGuidelines] = useState<Array<{ id: string; type: "horizontal" | "vertical"; position: number }>>([])
+  const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
 
   const handleExportCanvas = useCallback(() => {
     const canvas = document.createElement("canvas")
@@ -98,16 +99,61 @@ export function CanvasEditor({
     })
   }, [layers])
 
-  const handleCreateGuideline = useCallback((type: "horizontal" | "vertical", initialPosition: number) => {
-    setUserGuidelines((prev) => [
-      ...prev,
-      {
-        id: createId(),
+  const handleStartDragGuideline = useCallback(
+    (type: "horizontal" | "vertical", e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const canvasEl = canvasRef.current
+      if (!canvasEl) return
+      const rect = canvasEl.getBoundingClientRect()
+
+      let initialPos = 0
+      if (type === "horizontal") {
+        initialPos = Math.round((e.clientY - rect.top) / scale)
+      } else {
+        initialPos = Math.round((e.clientX - rect.left) / scale)
+      }
+
+      const clampedInitialPos = Math.max(0, Math.min(CANVAS_SIZE, initialPos))
+      const newId = createId()
+      const newGuideline = {
+        id: newId,
         type,
-        position: initialPosition,
-      },
-    ])
-  }, [])
+        position: clampedInitialPos,
+      }
+
+      setUserGuidelines((prev) => [...prev, newGuideline])
+      setDraggingGuidelineId(newId)
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        let currentPos = 0
+        if (type === "horizontal") {
+          currentPos = Math.round((moveEvent.clientY - rect.top) / scale)
+        } else {
+          currentPos = Math.round((moveEvent.clientX - rect.left) / scale)
+        }
+
+        if (currentPos < -30 || currentPos > CANVAS_SIZE + 30) {
+          setUserGuidelines((prev) => prev.filter((g) => g.id !== newId))
+        } else {
+          const clamped = Math.max(0, Math.min(CANVAS_SIZE, currentPos))
+          setUserGuidelines((prev) =>
+            prev.map((g) => (g.id === newId ? { ...g, position: clamped } : g))
+          )
+        }
+      }
+
+      const handlePointerUp = () => {
+        setDraggingGuidelineId(null)
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+      }
+
+      window.addEventListener("pointermove", handlePointerMove)
+      window.addEventListener("pointerup", handlePointerUp)
+    },
+    [scale],
+  )
 
   const handleDragGuideline = useCallback(
     (id: string, type: "horizontal" | "vertical", e: React.PointerEvent) => {
@@ -116,6 +162,8 @@ export function CanvasEditor({
       const canvasEl = canvasRef.current
       if (!canvasEl) return
       const rect = canvasEl.getBoundingClientRect()
+
+      setDraggingGuidelineId(id)
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         let newPos = 0
@@ -128,13 +176,15 @@ export function CanvasEditor({
         if (newPos < -30 || newPos > CANVAS_SIZE + 30) {
           setUserGuidelines((prev) => prev.filter((g) => g.id !== id))
         } else {
+          const clampedPos = Math.max(0, Math.min(CANVAS_SIZE, newPos))
           setUserGuidelines((prev) =>
-            prev.map((g) => (g.id === id ? { ...g, position: Math.max(0, Math.min(CANVAS_SIZE, newPos)) } : g))
+            prev.map((g) => (g.id === id ? { ...g, position: clampedPos } : g))
           )
         }
       }
 
       const handlePointerUp = () => {
+        setDraggingGuidelineId(null)
         window.removeEventListener("pointermove", handlePointerMove)
         window.removeEventListener("pointerup", handlePointerUp)
       }
@@ -743,12 +793,12 @@ export function CanvasEditor({
           onDragLeave={() => setIsDragOver(false)}
           onDrop={onDrop}
         >
-          <div style={{ width: CANVAS_SIZE * scale + 20, height: CANVAS_SIZE * scale + 20, position: "relative" }}>
-            <CanvasRuler scale={scale} onCreateGuideline={handleCreateGuideline} />
+          <div style={{ width: CANVAS_SIZE * scale + 24, height: CANVAS_SIZE * scale + 24, position: "relative" }}>
+            <CanvasRuler scale={scale} onStartDragGuideline={handleStartDragGuideline} />
             <div
               ref={canvasRef}
               className={cn(
-                "absolute top-[20px] left-[20px] origin-top-left bg-background shadow-sm ring-1 ring-border",
+                "absolute top-[24px] left-[24px] origin-top-left bg-background shadow-sm ring-1 ring-border",
                 activeTool !== "select" ? "cursor-crosshair" : "cursor-default",
               )}
               style={{
@@ -781,7 +831,7 @@ export function CanvasEditor({
                 <div
                   key={g.id}
                   className={cn(
-                    "absolute z-40 touch-none select-none",
+                    "absolute z-40 touch-none select-none group",
                     g.type === "horizontal"
                       ? "left-0 w-full cursor-ns-resize border-t-2 border-dashed border-cyan-400 hover:border-cyan-300"
                       : "top-0 h-full cursor-ew-resize border-l-2 border-dashed border-cyan-400 hover:border-cyan-300"
@@ -792,8 +842,17 @@ export function CanvasEditor({
                       : { left: g.position, width: 0 }
                   }
                   onPointerDown={(e) => handleDragGuideline(g.id, g.type, e)}
-                  title={`${g.type === "horizontal" ? "Y" : "X"}: ${g.position}px (Drag to move, drag off canvas to delete)`}
-                />
+                >
+                  <div
+                    className={cn(
+                      "absolute bg-cyan-600 text-white text-[10px] font-mono font-medium px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap transition-opacity",
+                      draggingGuidelineId === g.id ? "opacity-100 scale-100 z-50" : "opacity-0 group-hover:opacity-100",
+                      g.type === "horizontal" ? "left-4 -top-6" : "top-4 left-2"
+                    )}
+                  >
+                    {g.type === "horizontal" ? `Y: ${g.position}px` : `X: ${g.position}px`}
+                  </div>
+                </div>
               ))}
 
               {/* Drawing Rectangle Preview */}
