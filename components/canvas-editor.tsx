@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -30,11 +30,15 @@ function createBorderRectangleDataURL(width: number, height: number, color: stri
 interface CanvasEditorProps {
   splitDirection?: "horizontal" | "vertical"
   onToggleSplitDirection?: () => void
+  viewMode?: "canvas" | "notepad" | "split"
+  onViewModeChange?: (mode: "canvas" | "notepad" | "split") => void
 }
 
 export function CanvasEditor({
   splitDirection = "horizontal",
   onToggleSplitDirection,
+  viewMode = "split",
+  onViewModeChange,
 }: CanvasEditorProps) {
   const [history, setHistory] = useState<{
     past: Layer[][]
@@ -78,6 +82,7 @@ export function CanvasEditor({
     { id: "init-h-1080", type: "horizontal", position: 1080 },
   ])
   const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
+  const [bgColor, setBgColor] = useState("#ffffff")
 
   const handleExportCanvas = useCallback(() => {
     const EXPORT_W = 1920
@@ -88,7 +93,7 @@ export function CanvasEditor({
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    ctx.fillStyle = "#ffffff"
+    ctx.fillStyle = bgColor
     ctx.fillRect(0, 0, EXPORT_W, EXPORT_H)
 
     const visibleLayers = layers.filter((l) => l.visible)
@@ -124,7 +129,7 @@ export function CanvasEditor({
       }
       img.src = layer.src
     })
-  }, [layers])
+  }, [layers, bgColor])
 
   const handleStartDragGuideline = useCallback(
     (type: "horizontal" | "vertical", e: React.PointerEvent) => {
@@ -841,7 +846,24 @@ export function CanvasEditor({
             </Button>
           </div>
 
-          {onToggleSplitDirection && (
+          {/* Canvas Background Color Picker */}
+          <div className="ml-1 flex items-center gap-1.5 rounded-md border border-border p-0.5" title="Change Canvas Background Color">
+            <label className="relative flex h-7 w-7 cursor-pointer items-center justify-center rounded p-1 hover:bg-accent">
+              <Palette className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="color"
+                value={bgColor}
+                onChange={(e) => setBgColor(e.target.value)}
+                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+              />
+            </label>
+            <div
+              className="h-4 w-4 shrink-0 rounded-full border border-border shadow-sm mr-0.5"
+              style={{ backgroundColor: bgColor }}
+            />
+          </div>
+
+          {onToggleSplitDirection && viewMode === "split" && (
             <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5">
               <Button
                 variant="ghost"
@@ -856,6 +878,38 @@ export function CanvasEditor({
                 ) : (
                   <Columns2 className="h-4 w-4 text-muted-foreground" />
                 )}
+              </Button>
+            </div>
+          )}
+
+          {onViewModeChange && (
+            <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "canvas" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("canvas")}
+                title="Image Board Only"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "split" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("split")}
+                title="Split View"
+              >
+                <Columns2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "notepad" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("notepad")}
+                title="Note Only"
+              >
+                <FileText className="h-4 w-4" />
               </Button>
             </div>
           )}
@@ -898,13 +952,14 @@ export function CanvasEditor({
             <div
               ref={canvasRef}
               className={cn(
-                "absolute top-[24px] left-[24px] origin-top-left bg-background shadow-sm ring-1 ring-border",
+                "absolute top-[24px] left-[24px] origin-top-left shadow-sm ring-1 ring-border",
                 activeTool !== "select" ? "cursor-crosshair" : "cursor-default",
               )}
               style={{
                 width: CANVAS_SIZE,
                 height: CANVAS_SIZE,
                 transform: `scale(${scale})`,
+                backgroundColor: bgColor,
               }}
               onPointerDown={handleCanvasPointerDown}
             >

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 export function Workspace() {
   const [leftWidth, setLeftWidth] = useState(70) // percentage
   const [splitDirection, setSplitDirection] = useState<"horizontal" | "vertical">("vertical")
+  const [viewMode, setViewMode] = useState<"canvas" | "notepad" | "split">("split")
   const [isNotepadCollapsed, setIsNotepadCollapsed] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const lastWidthRef = useRef(70)
@@ -57,74 +58,86 @@ export function Workspace() {
     setIsNotepadCollapsed(false)
   }, [])
 
+  const showCanvas = viewMode === "canvas" || viewMode === "split"
+  const showNotepad = viewMode === "notepad" || viewMode === "split"
+  const showDivider = viewMode === "split" && !isNotepadCollapsed
+
   return (
     <div className={cn("flex h-dvh w-full overflow-hidden bg-background", splitDirection === "horizontal" ? "flex-row" : "flex-col")}>
       {/* Left Panel: Canvas Editor */}
       <div
         className="min-w-0 min-h-0"
         style={{
-          width: splitDirection === "horizontal" ? (isNotepadCollapsed ? "100%" : `${leftWidth}%`) : "100%",
-          height: splitDirection === "vertical" ? (isNotepadCollapsed ? "100%" : `${leftWidth}%`) : "100%",
+          display: showCanvas ? "block" : "none",
+          width: viewMode === "canvas" ? "100%" : (splitDirection === "horizontal" ? (isNotepadCollapsed ? "100%" : `${leftWidth}%`) : "100%"),
+          height: viewMode === "canvas" ? "100%" : (splitDirection === "vertical" ? (isNotepadCollapsed ? "100%" : `${leftWidth}%`) : "100%"),
           transition: isDragging ? "none" : (splitDirection === "horizontal" ? "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)" : "height 0.25s cubic-bezier(0.4, 0, 0.2, 1)"),
         }}
       >
         <CanvasEditor
           splitDirection={splitDirection}
           onToggleSplitDirection={() => setSplitDirection((prev) => (prev === "horizontal" ? "vertical" : "horizontal"))}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
         />
       </div>
 
       {/* Resizable Divider */}
-      <div
-        onPointerDown={handlePointerDown}
-        onDoubleClick={handleDoubleClick}
-        className={cn(
-          "relative z-40 flex shrink-0 items-center justify-center bg-border transition-colors hover:bg-selection/60",
-          splitDirection === "horizontal" ? "w-1 cursor-col-resize" : "h-1 w-full cursor-row-resize",
-          isDragging && "bg-selection",
-        )}
-      >
-        {/* Toggle Collapse Button */}
-        <button
-          onClick={toggleNotepad}
+      {showDivider && (
+        <div
+          onPointerDown={handlePointerDown}
+          onDoubleClick={handleDoubleClick}
           className={cn(
-            "absolute flex cursor-pointer items-center justify-center rounded-md border border-border bg-popover shadow-sm transition-transform hover:bg-accent",
-            splitDirection === "horizontal" ? "h-8 w-5" : "h-5 w-8"
+            "relative z-40 flex shrink-0 items-center justify-center bg-border transition-colors hover:bg-selection/60",
+            splitDirection === "horizontal" ? "w-1 cursor-col-resize" : "h-1 w-full cursor-row-resize",
+            isDragging && "bg-selection",
           )}
-          style={{ transform: "translate(0px)" }}
-          aria-label={isNotepadCollapsed ? "Expand notepad" : "Collapse notepad"}
-          title={isNotepadCollapsed ? "Expand notepad" : "Collapse notepad"}
         >
-          {splitDirection === "horizontal" ? (
-            isNotepadCollapsed ? (
-              <ChevronLeft className="h-3 w-3 text-muted-foreground" />
+          {/* Toggle Collapse Button */}
+          <button
+            onClick={toggleNotepad}
+            className={cn(
+              "absolute flex cursor-pointer items-center justify-center rounded-md border border-border bg-popover shadow-sm transition-transform hover:bg-accent",
+              splitDirection === "horizontal" ? "h-8 w-5" : "h-5 w-8"
+            )}
+            style={{ transform: "translate(0px)" }}
+            aria-label={isNotepadCollapsed ? "Expand notepad" : "Collapse notepad"}
+            title={isNotepadCollapsed ? "Expand notepad" : "Collapse notepad"}
+          >
+            {splitDirection === "horizontal" ? (
+              isNotepadCollapsed ? (
+                <ChevronLeft className="h-3 w-3 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              )
             ) : (
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            )
-          ) : (
-            isNotepadCollapsed ? (
-              <ChevronUp className="h-3 w-3 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
-            )
-          )}
-        </button>
-      </div>
+              isNotepadCollapsed ? (
+                <ChevronUp className="h-3 w-3 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              )
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Right Panel: Notepad */}
       <div
         className={cn(
           "min-w-0 min-h-0 overflow-hidden bg-background",
-          splitDirection === "horizontal" ? "border-l border-border" : "border-t border-border"
+          viewMode === "split" && (splitDirection === "horizontal" ? "border-l border-border" : "border-t border-border")
         )}
         style={{
-          width: splitDirection === "horizontal" ? (isNotepadCollapsed ? "0%" : `${100 - leftWidth}%`) : "100%",
-          height: splitDirection === "vertical" ? (isNotepadCollapsed ? "0%" : `${100 - leftWidth}%`) : "100%",
+          display: showNotepad ? "block" : "none",
+          width: viewMode === "notepad" ? "100%" : (splitDirection === "horizontal" ? (isNotepadCollapsed ? "0%" : `${100 - leftWidth}%`) : "100%"),
+          height: viewMode === "notepad" ? "100%" : (splitDirection === "vertical" ? (isNotepadCollapsed ? "0%" : `${100 - leftWidth}%`) : "100%"),
           transition: isDragging ? "none" : (splitDirection === "horizontal" ? "width 0.25s cubic-bezier(0.4, 0, 0.2, 1)" : "height 0.25s cubic-bezier(0.4, 0, 0.2, 1)"),
-          display: isNotepadCollapsed ? "none" : "block",
         }}
       >
-        <Notepad />
+        <Notepad
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+        />
       </div>
     </div>
   )

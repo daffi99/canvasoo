@@ -16,11 +16,20 @@ import {
   Code,
   Undo2,
   Redo2,
+  ImageIcon,
+  Columns2,
+  FileText,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
-export function Notepad() {
+interface NotepadProps {
+  viewMode?: "canvas" | "notepad" | "split"
+  onViewModeChange?: (mode: "canvas" | "notepad" | "split") => void
+}
+
+export function Notepad({ viewMode = "split", onViewModeChange }: NotepadProps) {
   const [title, setTitle] = useState("")
 
   const editor = useEditor({
@@ -171,24 +180,58 @@ export function Notepad() {
           </button>
         </div>
 
-        {/* Undo / Redo group */}
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => editor.chain().focus().undo().run()}
-            disabled={!editor.can().chain().focus().undo().run()}
-            className="h-7 w-7 rounded p-1 text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
-            title="Undo"
-          >
-            <Undo2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().redo().run()}
-            disabled={!editor.can().chain().focus().redo().run()}
-            className="h-7 w-7 rounded p-1 text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
-            title="Redo"
-          >
-            <Redo2 className="h-4 w-4" />
-          </button>
+        {/* Undo / Redo & View Mode group */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => editor.chain().focus().undo().run()}
+              disabled={!editor.can().chain().focus().undo().run()}
+              className="h-7 w-7 rounded p-1 text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+              title="Undo"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().redo().run()}
+              disabled={!editor.can().chain().focus().redo().run()}
+              className="h-7 w-7 rounded p-1 text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+              title="Redo"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
+
+          {onViewModeChange && (
+            <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "canvas" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("canvas")}
+                title="Image Board Only"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "split" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("split")}
+                title="Split View"
+              >
+                <Columns2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-7 w-7", viewMode === "notepad" ? "bg-accent text-foreground" : "text-muted-foreground")}
+                onClick={() => onViewModeChange("notepad")}
+                title="Note Only"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </header>
 
