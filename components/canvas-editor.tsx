@@ -77,16 +77,34 @@ export function CanvasEditor({
   const [scale, setScale] = useState(0.55)
   const [isDragOver, setIsDragOver] = useState(false)
   const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
+  const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9")
+  const exportWidth = aspectRatio === "16:9" ? 1920 : 1080
+  const exportHeight = aspectRatio === "16:9" ? 1080 : 1920
+
   const [userGuidelines, setUserGuidelines] = useState<Array<{ id: string; type: "horizontal" | "vertical"; position: number }>>([
-    { id: "init-v-1920", type: "vertical", position: 1920 },
-    { id: "init-h-1080", type: "horizontal", position: 1080 },
+    { id: "init-v-frame", type: "vertical", position: 1920 },
+    { id: "init-h-frame", type: "horizontal", position: 1080 },
   ])
   const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
   const [bgColor, setBgColor] = useState("#ffffff")
 
+  const handleToggleAspectRatio = useCallback((ratio: "16:9" | "9:16") => {
+    setAspectRatio(ratio)
+    const newW = ratio === "16:9" ? 1920 : 1080
+    const newH = ratio === "16:9" ? 1080 : 1920
+    setUserGuidelines((prev) => {
+      const filtered = prev.filter((g) => g.id !== "init-v-frame" && g.id !== "init-h-frame" && g.id !== "init-v-1920" && g.id !== "init-h-1080")
+      return [
+        ...filtered,
+        { id: "init-v-frame", type: "vertical", position: newW },
+        { id: "init-h-frame", type: "horizontal", position: newH },
+      ]
+    })
+  }, [])
+
   const handleExportCanvas = useCallback(() => {
-    const EXPORT_W = 1920
-    const EXPORT_H = 1080
+    const EXPORT_W = exportWidth
+    const EXPORT_H = exportHeight
     const canvas = document.createElement("canvas")
     canvas.width = EXPORT_W
     canvas.height = EXPORT_H
@@ -99,7 +117,7 @@ export function CanvasEditor({
     const visibleLayers = layers.filter((l) => l.visible)
     if (visibleLayers.length === 0) {
       const link = document.createElement("a")
-      link.download = `canvas-1920x1080-${Date.now()}.png`
+      link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
       link.href = canvas.toDataURL("image/png")
       link.click()
       return
@@ -122,14 +140,14 @@ export function CanvasEditor({
             }
           })
           const link = document.createElement("a")
-          link.download = `canvas-1920x1080-${Date.now()}.png`
+          link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
           link.href = canvas.toDataURL("image/png")
           link.click()
         }
       }
       img.src = layer.src
     })
-  }, [layers, bgColor])
+  }, [layers, bgColor, exportWidth, exportHeight])
 
   const handleStartDragGuideline = useCallback(
     (type: "horizontal" | "vertical", e: React.PointerEvent) => {
@@ -728,9 +746,9 @@ export function CanvasEditor({
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCanvas} title="Export top-left 1920×1080 area as PNG">
+          <Button variant="outline" size="sm" onClick={handleExportCanvas} title={`Export top-left ${exportWidth}×${exportHeight} area as PNG`}>
             <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export (1920×1080)</span>
+            <span className="hidden sm:inline">Export ({exportWidth}×{exportHeight})</span>
           </Button>
           <div className="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground md:flex">
             <ClipboardPaste className="h-3.5 w-3.5" />
@@ -863,6 +881,28 @@ export function CanvasEditor({
             />
           </div>
 
+          {/* Aspect Ratio Switcher */}
+          <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5" title="Canvas Aspect Ratio">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 px-2 text-xs font-semibold", aspectRatio === "16:9" ? "bg-accent text-foreground" : "text-muted-foreground")}
+              onClick={() => handleToggleAspectRatio("16:9")}
+              title="16:9 Landscape (1920×1080)"
+            >
+              16:9
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("h-7 px-2 text-xs font-semibold", aspectRatio === "9:16" ? "bg-accent text-foreground" : "text-muted-foreground")}
+              onClick={() => handleToggleAspectRatio("9:16")}
+              title="9:16 Portrait (1080×1920)"
+            >
+              9:16
+            </Button>
+          </div>
+
           {onToggleSplitDirection && viewMode === "split" && (
             <div className="ml-1 flex items-center gap-0.5 rounded-md border border-border p-0.5">
               <Button
@@ -982,6 +1022,19 @@ export function CanvasEditor({
                     onGuides={setGuides}
                   />
                 ))}
+              </div>
+
+              {/* Active Export Frame Overlay */}
+              <div
+                className="pointer-events-none absolute top-0 left-0 border-2 border-dashed border-cyan-500/35 z-30"
+                style={{
+                  width: exportWidth,
+                  height: exportHeight,
+                }}
+              >
+                <span className="absolute bottom-1 right-2 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-cyan-300 shadow-sm border border-cyan-500/30 select-none">
+                  {exportWidth} × {exportHeight} ({aspectRatio})
+                </span>
               </div>
 
               {/* User Created Figma Guidelines */}
