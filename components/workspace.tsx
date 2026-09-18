@@ -60,7 +60,7 @@ export function Workspace() {
 
   const showCanvas = viewMode === "canvas" || viewMode === "split"
   const showNotepad = viewMode === "notepad" || viewMode === "split"
-  const showDivider = viewMode === "split" && !isNotepadCollapsed
+  const showDivider = viewMode === "split"
 
   return (
     <div className={cn("flex h-dvh w-full overflow-hidden bg-background", splitDirection === "horizontal" ? "flex-row" : "flex-col")}>
@@ -95,9 +95,10 @@ export function Workspace() {
         >
           {/* Toggle Collapse Button */}
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleNotepad}
             className={cn(
-              "absolute flex cursor-pointer items-center justify-center rounded-md border border-border bg-popover shadow-sm transition-transform hover:bg-accent",
+              "absolute flex cursor-pointer items-center justify-center rounded-md border border-border bg-popover shadow-sm transition-transform hover:bg-accent z-50",
               splitDirection === "horizontal" ? "h-8 w-5" : "h-5 w-8"
             )}
             style={{ transform: "translate(0px)" }}

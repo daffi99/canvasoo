@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -87,6 +87,7 @@ export function CanvasEditor({
   ])
   const [draggingGuidelineId, setDraggingGuidelineId] = useState<string | null>(null)
   const [bgColor, setBgColor] = useState("#ffffff")
+  const [isLayersCollapsed, setIsLayersCollapsed] = useState(false)
 
   const handleToggleAspectRatio = useCallback((ratio: "16:9" | "9:16") => {
     setAspectRatio(ratio)
@@ -957,6 +958,17 @@ export function CanvasEditor({
           <Button
             variant="ghost"
             size="sm"
+            className={cn("h-7 gap-1 px-2 text-xs", isLayersCollapsed ? "text-muted-foreground" : "bg-accent text-foreground")}
+            onClick={() => setIsLayersCollapsed(!isLayersCollapsed)}
+            title={isLayersCollapsed ? "Show Layers Section" : "Hide Layers Section"}
+          >
+            <Layers className="h-4 w-4" />
+            <span className="hidden sm:inline">Layers</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setHistory((prev) => ({
                 past: [...prev.past, prev.present],
@@ -1103,17 +1115,20 @@ export function CanvasEditor({
         </main>
 
         {/* Layers sidebar */}
-        <aside className="w-72 shrink-0 border-l border-border bg-sidebar">
-          <LayersPanel
-            layers={layers}
-            selectedId={selectedId}
-            selectedIds={selectedIds}
-            onSelect={handleSelectLayer}
-            onToggleVisible={toggleVisible}
-            onDelete={deleteLayer}
-            onMove={moveLayer}
-          />
-        </aside>
+        {!isLayersCollapsed && (
+          <aside className="w-72 shrink-0 border-l border-border bg-sidebar">
+            <LayersPanel
+              layers={layers}
+              selectedId={selectedId}
+              selectedIds={selectedIds}
+              onSelect={handleSelectLayer}
+              onToggleVisible={toggleVisible}
+              onDelete={deleteLayer}
+              onMove={moveLayer}
+              onToggleCollapse={() => setIsLayersCollapsed(true)}
+            />
+          </aside>
+        )}
       </div>
 
       <input

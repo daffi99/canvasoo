@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImageIcon, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Eye, EyeOff, ImageIcon, Trash2, PanelRightClose } from "lucide-react"
 import type { Layer } from "@/lib/editor-types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,7 @@ interface LayersPanelProps {
   onToggleVisible: (id: string) => void
   onDelete: (id: string) => void
   onMove: (id: string, dir: "up" | "down") => void
+  onToggleCollapse?: () => void
 }
 
 export function LayersPanel({
@@ -23,6 +24,7 @@ export function LayersPanel({
   onToggleVisible,
   onDelete,
   onMove,
+  onToggleCollapse,
 }: LayersPanelProps) {
   // Top-most layer (last in array) should appear first in the list.
   const ordered = [...layers].reverse()
@@ -30,8 +32,22 @@ export function LayersPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-sm font-medium text-foreground">Layers</h2>
-        <span className="text-xs text-muted-foreground">{layers.length}</span>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-foreground">Layers</h2>
+          <span className="text-xs text-muted-foreground">({layers.length})</span>
+        </div>
+        {onToggleCollapse && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={onToggleCollapse}
+            title="Hide Layers Section"
+            aria-label="Hide Layers Section"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {ordered.length === 0 ? (
