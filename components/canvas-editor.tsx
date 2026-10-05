@@ -105,12 +105,16 @@ export function CanvasEditor({
   }, [])
 
   const addTextLayer = useCallback((x?: number, y?: number) => {
+    const offset = (cascadeRef.current % 6) * 30
+    cascadeRef.current += 1
+    const initialX = x ?? Math.round(50 + offset)
+    const initialY = y ?? Math.round(50 + offset)
     const newTextLayer: Layer = {
       id: createId(),
       src: "",
       name: `Text ${layers.filter((l) => l.type === "text").length + 1}`,
-      x: x ?? 100,
-      y: y ?? 100,
+      x: initialX,
+      y: initialY,
       width: 320,
       height: 100,
       naturalWidth: 320,
@@ -160,12 +164,10 @@ export function CanvasEditor({
           const fontSize = l.fontSize ?? 48
           ctx.font = `bold ${fontSize}px sans-serif`
           ctx.fillStyle = l.color ?? "#000000"
-          ctx.textAlign = "center"
-          ctx.textBaseline = "middle"
+          ctx.textAlign = "left"
+          ctx.textBaseline = "top"
           const text = l.text || "Text"
-          const centerX = l.x + l.width / 2
-          const centerY = l.y + l.height / 2
-          ctx.fillText(text, centerX, centerY)
+          ctx.fillText(text, l.x + 8, l.y + 8)
           ctx.restore()
         } else {
           const found = images.find((item) => item.layer.id === l.id)
@@ -619,8 +621,8 @@ export function CanvasEditor({
       }
       const offset = (cascadeRef.current % 6) * 40
       cascadeRef.current += 1
-      const x = Math.round(CANVAS_SIZE / 2 - w / 2 + offset)
-      const y = Math.round(CANVAS_SIZE / 2 - h / 2 + offset)
+      const x = Math.round(50 + offset)
+      const y = Math.round(50 + offset)
       const layer: Layer = {
         id: createId(),
         src,

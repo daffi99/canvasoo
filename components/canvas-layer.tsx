@@ -216,7 +216,7 @@ export function CanvasLayer({
     >
       {layer.type === "text" ? (
         <div
-          className="pointer-events-none flex h-full w-full items-center justify-center overflow-hidden select-none whitespace-pre-wrap text-center leading-tight break-words p-1"
+          className="pointer-events-none flex h-full w-full items-start justify-start overflow-hidden select-none whitespace-pre-wrap text-left leading-tight break-words p-2"
           style={{
             fontSize: `${layer.fontSize ?? 48}px`,
             color: layer.color ?? "#000000",
