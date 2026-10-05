@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -159,22 +159,33 @@ export function CanvasEditor({
 
     const renderFinalExport = () => {
       visibleLayers.forEach((l) => {
+        const rotDeg = l.rotation || 0
+        const rotRad = (rotDeg * Math.PI) / 180
+
+        ctx.save()
+        const centerX = l.x + l.width / 2
+        const centerY = l.y + l.height / 2
+        ctx.translate(centerX, centerY)
+
+        if (rotDeg !== 0) {
+          ctx.rotate(rotRad)
+        }
+
         if (l.type === "text") {
-          ctx.save()
           const fontSize = l.fontSize ?? 48
           ctx.font = `bold ${fontSize}px sans-serif`
           ctx.fillStyle = l.color ?? "#000000"
           ctx.textAlign = "left"
           ctx.textBaseline = "top"
           const text = l.text || "Text"
-          ctx.fillText(text, l.x + 8, l.y + 8)
-          ctx.restore()
+          ctx.fillText(text, -l.width / 2 + 8, -l.height / 2 + 8)
         } else {
           const found = images.find((item) => item.layer.id === l.id)
           if (found) {
-            ctx.drawImage(found.img, l.x, l.y, l.width, l.height)
+            ctx.drawImage(found.img, -l.width / 2, -l.height / 2, l.width, l.height)
           }
         }
+        ctx.restore()
       })
       const link = document.createElement("a")
       link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
@@ -1068,83 +1079,149 @@ export function CanvasEditor({
         </div>
       </header>
 
-      {/* Contextual Text Properties Bar */}
-      {selectedTextLayer && (
+      {/* Contextual Layer Properties Bar */}
+      {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs">
-          <div className="flex items-center gap-1.5 font-medium text-foreground shrink-0">
-            <Type className="h-4 w-4 text-purple-500" />
-            <span>Text Settings:</span>
-          </div>
+          {selectedTextLayer && (
+            <>
+              <div className="flex items-center gap-1.5 font-medium text-foreground shrink-0">
+                <Type className="h-4 w-4 text-purple-500" />
+                <span>Text:</span>
+              </div>
 
-          {/* Text Content Input */}
-          <input
-            type="text"
-            value={selectedTextLayer.text || ""}
-            onChange={(e) => updateLayer(selectedTextLayer.id, { text: e.target.value })}
-            placeholder="Edit text content..."
-            className="h-7 w-52 rounded border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-selection"
-          />
-
-          <div className="h-4 w-px bg-border shrink-0" />
-
-          {/* Font Size Input */}
-          <div className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-0.5 shrink-0" title="Font Size (px)">
-            <span className="text-[10px] font-mono text-muted-foreground">Size:</span>
-            <input
-              type="number"
-              min={10}
-              max={300}
-              value={selectedTextLayer.fontSize ?? 48}
-              onChange={(e) => updateLayer(selectedTextLayer.id, { fontSize: Math.max(10, Math.min(300, Number(e.target.value) || 48)) })}
-              className="h-6 w-12 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
-            />
-            <span className="text-[10px] text-muted-foreground">px</span>
-          </div>
-
-          {/* Quick Font Size Presets */}
-          <div className="hidden md:flex items-center gap-0.5 rounded border border-border bg-background p-0.5 shrink-0">
-            {[24, 36, 48, 64, 96, 128].map((size) => (
-              <button
-                key={size}
-                onClick={() => updateLayer(selectedTextLayer.id, { fontSize: size })}
-                className={cn(
-                  "h-6 px-1.5 text-[11px] font-mono rounded transition-colors hover:bg-accent",
-                  (selectedTextLayer.fontSize ?? 48) === size ? "bg-accent font-bold text-foreground" : "text-muted-foreground"
-                )}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-
-          <div className="h-4 w-px bg-border shrink-0" />
-
-          {/* Text Color Picker & Swatches */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-mono text-muted-foreground">Color:</span>
-            <label className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border p-0.5 shadow-sm hover:opacity-80" title="Custom Text Color">
-              <div className="h-full w-full rounded shadow-xs" style={{ backgroundColor: selectedTextLayer.color || "#000000" }} />
+              {/* Text Content Input */}
               <input
-                type="color"
-                value={selectedTextLayer.color || "#000000"}
-                onChange={(e) => updateLayer(selectedTextLayer.id, { color: e.target.value })}
-                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                type="text"
+                value={selectedTextLayer.text || ""}
+                onChange={(e) => updateLayer(selectedTextLayer.id, { text: e.target.value })}
+                placeholder="Edit text content..."
+                className="h-7 w-48 rounded border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-selection"
               />
-            </label>
-            <div className="flex items-center gap-1 ml-0.5">
-              {["#000000", "#ffffff", "#ef4444", "#22c55e", "#0ea5e9", "#eab308", "#8b5cf6"].map((hex) => (
-                <button
-                  key={hex}
-                  onClick={() => updateLayer(selectedTextLayer.id, { color: hex })}
-                  className={cn(
-                    "h-5 w-5 rounded-full border border-border shadow-xs transition-transform hover:scale-110",
-                    (selectedTextLayer.color || "#000000") === hex && "ring-2 ring-selection ring-offset-1"
-                  )}
-                  style={{ backgroundColor: hex }}
-                  title={hex}
+
+              <div className="h-4 w-px bg-border shrink-0" />
+
+              {/* Font Size Input */}
+              <div className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-0.5 shrink-0" title="Font Size (px)">
+                <span className="text-[10px] font-mono text-muted-foreground">Size:</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={300}
+                  value={selectedTextLayer.fontSize ?? 48}
+                  onChange={(e) => updateLayer(selectedTextLayer.id, { fontSize: Math.max(10, Math.min(300, Number(e.target.value) || 48)) })}
+                  className="h-6 w-12 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
                 />
-              ))}
-            </div>
+                <span className="text-[10px] text-muted-foreground">px</span>
+              </div>
+
+              {/* Quick Font Size Presets */}
+              <div className="hidden lg:flex items-center gap-0.5 rounded border border-border bg-background p-0.5 shrink-0">
+                {[24, 36, 48, 64, 96, 128].map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => updateLayer(selectedTextLayer.id, { fontSize: size })}
+                    className={cn(
+                      "h-6 px-1.5 text-[11px] font-mono rounded transition-colors hover:bg-accent",
+                      (selectedTextLayer.fontSize ?? 48) === size ? "bg-accent font-bold text-foreground" : "text-muted-foreground"
+                    )}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-4 w-px bg-border shrink-0" />
+
+              {/* Text Color Picker & Swatches */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-mono text-muted-foreground">Color:</span>
+                <label className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border p-0.5 shadow-sm hover:opacity-80" title="Custom Text Color">
+                  <div className="h-full w-full rounded shadow-xs" style={{ backgroundColor: selectedTextLayer.color || "#000000" }} />
+                  <input
+                    type="color"
+                    value={selectedTextLayer.color || "#000000"}
+                    onChange={(e) => updateLayer(selectedTextLayer.id, { color: e.target.value })}
+                    className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+                  />
+                </label>
+                <div className="flex items-center gap-1 ml-0.5">
+                  {["#000000", "#ffffff", "#ef4444", "#22c55e", "#0ea5e9", "#eab308", "#8b5cf6"].map((hex) => (
+                    <button
+                      key={hex}
+                      onClick={() => updateLayer(selectedTextLayer.id, { color: hex })}
+                      className={cn(
+                        "h-5 w-5 rounded-full border border-border shadow-xs transition-transform hover:scale-110",
+                        (selectedTextLayer.color || "#000000") === hex && "ring-2 ring-selection ring-offset-1"
+                      )}
+                      style={{ backgroundColor: hex }}
+                      title={hex}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-4 w-px bg-border shrink-0" />
+            </>
+          )}
+
+          {/* Rotation Controls for Selected Layer(s) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-mono text-muted-foreground">Rotate:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 gap-1 text-xs"
+              onClick={() => {
+                selectedIds.forEach((id) => {
+                  const l = layers.find((item) => item.id === id)
+                  if (l) {
+                    updateLayer(id, { rotation: ((l.rotation || 0) - 90 + 360) % 360 })
+                  }
+                })
+              }}
+              title="Rotate 90° Counter-Clockwise"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">-90°</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 gap-1 text-xs"
+              onClick={() => {
+                selectedIds.forEach((id) => {
+                  const l = layers.find((item) => item.id === id)
+                  if (l) {
+                    updateLayer(id, { rotation: ((l.rotation || 0) + 90) % 360 })
+                  }
+                })
+              }}
+              title="Rotate 90° Clockwise"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">+90°</span>
+            </Button>
+
+            {selectedIds.length === 1 && (() => {
+              const selLayer = layers.find((l) => l.id === selectedIds[0])
+              if (!selLayer) return null
+              return (
+                <div className="flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5" title="Exact rotation angle (degrees)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={360}
+                    value={selLayer.rotation || 0}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0
+                      updateLayer(selLayer.id, { rotation: ((val % 360) + 360) % 360 })
+                    }}
+                    className="h-5 w-10 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                  />
+                  <span className="text-[10px] text-muted-foreground">°</span>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}

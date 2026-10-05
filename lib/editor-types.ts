@@ -15,6 +15,7 @@ export interface Layer {
   text?: string
   fontSize?: number
   color?: string
+  rotation?: number
 }
 
 export function createId(): string {

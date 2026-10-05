@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useRef } from "react"
+import { RotateCw } from "lucide-react"
 import { CANVAS_SIZE, type Layer } from "@/lib/editor-types"
 import { cn } from "@/lib/utils"
 
@@ -21,7 +22,7 @@ interface CanvasLayerProps {
   onGuides: (guides: { x: number[]; y: number[] }) => void
 }
 
-type DragMode = "move" | "resize"
+type DragMode = "move" | "resize" | "rotate"
 
 // Snap threshold in screen pixels (converted to canvas px using scale).
 const SNAP_PX = 6
@@ -41,6 +42,7 @@ export function CanvasLayer({
   onDragEnd,
   onGuides,
 }: CanvasLayerProps) {
+  const layerRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef<{
     mode: DragMode
     startX: number
@@ -50,6 +52,10 @@ export function CanvasLayer({
     origW: number
     origH: number
     ratio: number
+    origRotation: number
+    centerX: number
+    centerY: number
+    startAngleDeg: number
     otherSelectedOrigs: Array<{ id: string; x: number; y: number }>
     targetsX: number[]
     targetsY: number[]
@@ -98,6 +104,24 @@ export function CanvasLayer({
         ? allLayers.filter((l) => selectedIds.includes(l.id) && l.id !== layer.id)
         : []
 
+    let centerX = 0
+    let centerY = 0
+    let startAngleDeg = 0
+
+    if (mode === "rotate") {
+      const layerEl = layerRef.current
+      if (layerEl) {
+        const rect = layerEl.getBoundingClientRect()
+        centerX = rect.left + rect.width / 2
+        centerY = rect.top + rect.height / 2
+      } else {
+        centerX = e.clientX
+        centerY = e.clientY
+      }
+      const rad = Math.atan2(e.clientY - centerY, e.clientX - centerX)
+      startAngleDeg = (rad * 180) / Math.PI
+    }
+
     stateRef.current = {
       mode,
       startX: e.clientX,
@@ -107,6 +131,10 @@ export function CanvasLayer({
       origW: layer.width,
       origH: layer.height,
       ratio: layer.width / layer.height,
+      origRotation: layer.rotation || 0,
+      centerX,
+      centerY,
+      startAngleDeg,
       otherSelectedOrigs: otherSelected.map((l) => ({ id: l.id, x: l.x, y: l.y })),
       targetsX: xs,
       targetsY: ys,
@@ -128,6 +156,29 @@ export function CanvasLayer({
     if (!s.moved && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
       s.moved = true
       onDragStart?.()
+    }
+
+    if (s.mode === "rotate") {
+      const currentRad = Math.atan2(e.clientY - s.centerY, e.clientX - s.centerX)
+      const currentDeg = (currentRad * 180) / Math.PI
+      const diff = currentDeg - s.startAngleDeg
+      let newDeg = Math.round(s.origRotation + diff)
+
+      newDeg = ((newDeg % 360) + 360) % 360
+
+      if (e.shiftKey) {
+        newDeg = (Math.round(newDeg / 15) * 15) % 360
+      } else {
+        for (const snapAngle of [0, 90, 180, 270, 360]) {
+          if (Math.abs(newDeg - snapAngle) <= 4) {
+            newDeg = snapAngle % 360
+            break
+          }
+        }
+      }
+
+      onChange(layer.id, { rotation: newDeg })
+      return
     }
 
     if (s.mode === "move") {
@@ -207,11 +258,19 @@ export function CanvasLayer({
 
   return (
     <div
+      ref={layerRef}
       className={cn(
         "absolute touch-none select-none",
         selected ? "outline outline-2 outline-selection" : "outline-none",
       )}
-      style={{ left: layer.x, top: layer.y, width: layer.width, height: layer.height }}
+      style={{
+        left: layer.x,
+        top: layer.y,
+        width: layer.width,
+        height: layer.height,
+        transform: layer.rotation ? `rotate(${layer.rotation}deg)` : undefined,
+        transformOrigin: "center center",
+      }}
       onPointerDown={(e) => handlePointerDown(e, "move")}
     >
       {layer.type === "text" ? (
@@ -236,12 +295,27 @@ export function CanvasLayer({
         />
       )}
       {selected && (
-        <span
-          role="presentation"
-          onPointerDown={(e) => handlePointerDown(e, "resize")}
-          className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-full border-2 border-selection bg-background"
-          style={{ transform: `scale(${1 / scale})`, transformOrigin: "bottom right" }}
-        />
+        <>
+          <div
+            role="presentation"
+            onPointerDown={(e) => handlePointerDown(e, "rotate")}
+            className="absolute -top-7 left-1/2 flex -translate-x-1/2 flex-col items-center cursor-grab active:cursor-grabbing z-30"
+            style={{ transform: `translateX(-50%) scale(${1 / scale})`, transformOrigin: "bottom center" }}
+            title="Click & drag to rotate layer (Hold Shift for 15° steps)"
+          >
+            <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-selection bg-background shadow-xs hover:scale-110 transition-transform">
+              <RotateCw className="h-3 w-3 text-selection" />
+            </div>
+            <div className="h-2.5 w-0.5 bg-selection" />
+          </div>
+
+          <span
+            role="presentation"
+            onPointerDown={(e) => handlePointerDown(e, "resize")}
+            className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-full border-2 border-selection bg-background"
+            style={{ transform: `scale(${1 / scale})`, transformOrigin: "bottom right" }}
+          />
+        </>
       )}
     </div>
   )
