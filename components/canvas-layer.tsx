@@ -281,6 +281,7 @@ export function CanvasLayer({
             color: layer.color ?? "#000000",
             fontFamily: "sans-serif",
             fontWeight: "bold",
+            opacity: layer.opacity ?? 1,
           }}
         >
           {layer.text || "Text"}
@@ -292,6 +293,7 @@ export function CanvasLayer({
           alt={layer.name}
           draggable={false}
           className="pointer-events-none h-full w-full object-fill"
+          style={{ opacity: layer.opacity ?? 1 }}
         />
       )}
       {selected && (

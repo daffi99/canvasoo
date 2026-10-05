@@ -163,6 +163,7 @@ export function CanvasEditor({
         const rotRad = (rotDeg * Math.PI) / 180
 
         ctx.save()
+        ctx.globalAlpha = l.opacity ?? 1
         const centerX = l.x + l.width / 2
         const centerY = l.y + l.height / 2
         ctx.translate(centerX, centerY)
@@ -1222,6 +1223,60 @@ export function CanvasEditor({
                 </div>
               )
             })()}
+          </div>
+
+          <div className="h-4 w-px bg-border shrink-0" />
+
+          {/* Opacity Controls for Selected Layer(s) */}
+          <div className="flex items-center gap-1.5 shrink-0" title="Opacity (0% - 100%)">
+            <span className="text-[10px] font-mono text-muted-foreground">Opacity:</span>
+            {selectedIds.length === 1 && (() => {
+              const selLayer = layers.find((l) => l.id === selectedIds[0])
+              if (!selLayer) return null
+              const currentOpacity = Math.round((selLayer.opacity ?? 1) * 100)
+              return (
+                <>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={currentOpacity}
+                    onChange={(e) => updateLayer(selLayer.id, { opacity: Number(e.target.value) / 100 })}
+                    className="h-1.5 w-16 cursor-pointer accent-selection"
+                  />
+                  <div className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={currentOpacity}
+                      onChange={(e) => {
+                        const val = Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                        updateLayer(selLayer.id, { opacity: val / 100 })
+                      }}
+                      className="h-5 w-8 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                    />
+                    <span className="text-[10px] text-muted-foreground">%</span>
+                  </div>
+                </>
+              )
+            })()}
+            {selectedIds.length > 1 && (
+              <div className="flex items-center gap-1">
+                {[25, 50, 75, 100].map((percent) => (
+                  <button
+                    key={percent}
+                    onClick={() => {
+                      selectedIds.forEach((id) => updateLayer(id, { opacity: percent / 100 }))
+                    }}
+                    className="h-6 px-1.5 text-[11px] font-mono rounded border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    {percent}%
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
