@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw, Copy } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -691,7 +691,43 @@ export function CanvasEditor({
     return () => window.removeEventListener("paste", onPaste)
   }, [addFile])
 
-  // Keyboard Undo/Redo shortcuts
+  const duplicateSelectedLayers = useCallback(() => {
+    if (selectedIds.length === 0) return
+    const selectedSet = new Set(selectedIds)
+
+    setHistory((prev) => {
+      const currentLayers = prev.present
+      const newLayersToInsert: Layer[] = []
+      const newSelectedIds: string[] = []
+
+      currentLayers.forEach((l) => {
+        if (selectedSet.has(l.id)) {
+          const newId = createId()
+          newSelectedIds.push(newId)
+          const duplicated: Layer = {
+            ...l,
+            id: newId,
+            name: l.name ? `${l.name} (Copy)` : "Layer (Copy)",
+            x: Math.round(l.x + 20),
+            y: Math.round(l.y + 20),
+          }
+          newLayersToInsert.push(duplicated)
+        }
+      })
+
+      if (newLayersToInsert.length === 0) return prev
+
+      setTimeout(() => setSelectedIds(newSelectedIds), 0)
+
+      return {
+        past: [...prev.past, prev.present],
+        present: [...prev.present, ...newLayersToInsert],
+        future: [],
+      }
+    })
+  }, [selectedIds])
+
+  // Keyboard Undo/Redo & Duplicate shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
@@ -699,6 +735,12 @@ export function CanvasEditor({
 
       const isMac = typeof window !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)
       const modifier = isMac ? e.metaKey : e.ctrlKey
+
+      if (modifier && e.key.toLowerCase() === "d") {
+        e.preventDefault()
+        duplicateSelectedLayers()
+        return
+      }
 
       if (modifier && e.key.toLowerCase() === "z") {
         e.preventDefault()
@@ -714,7 +756,7 @@ export function CanvasEditor({
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [undo, redo])
+  }, [undo, redo, duplicateSelectedLayers])
 
   // Delete selected with keyboard
   useEffect(() => {
@@ -1278,6 +1320,20 @@ export function CanvasEditor({
               </div>
             )}
           </div>
+
+          <div className="h-4 w-px bg-border shrink-0" />
+
+          {/* Duplicate Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 gap-1 text-xs"
+            onClick={duplicateSelectedLayers}
+            title="Duplicate Selected Layer(s) (Cmd+D / Ctrl+D)"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Duplicate</span>
+          </Button>
         </div>
       )}
 
