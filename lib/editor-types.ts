@@ -11,6 +11,10 @@ export interface Layer {
   naturalWidth: number
   naturalHeight: number
   visible: boolean
+  type?: "image" | "text"
+  text?: string
+  fontSize?: number
+  color?: string
 }
 
 export function createId(): string {

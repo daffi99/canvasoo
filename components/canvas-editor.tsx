@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -53,6 +53,7 @@ export function CanvasEditor({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedId = selectedIds[0] ?? null
+  const selectedTextLayer = selectedIds.length === 1 ? layers.find((l) => l.id === selectedIds[0] && l.type === "text") : null
 
   const handleSelectLayer = useCallback((id: string, e?: React.PointerEvent | React.MouseEvent) => {
     if (e && (e.shiftKey || e.metaKey || e.ctrlKey)) {
@@ -103,6 +104,31 @@ export function CanvasEditor({
     })
   }, [])
 
+  const addTextLayer = useCallback((x?: number, y?: number) => {
+    const newTextLayer: Layer = {
+      id: createId(),
+      src: "",
+      name: `Text ${layers.filter((l) => l.type === "text").length + 1}`,
+      x: x ?? 100,
+      y: y ?? 100,
+      width: 320,
+      height: 100,
+      naturalWidth: 320,
+      naturalHeight: 100,
+      visible: true,
+      type: "text",
+      text: "Sample Text",
+      fontSize: 48,
+      color: "#000000",
+    }
+    setHistory((prev) => ({
+      past: [...prev.past, prev.present],
+      present: [...prev.present, newTextLayer],
+      future: [],
+    }))
+    setSelectedIds([newTextLayer.id])
+  }, [layers])
+
   const handleExportCanvas = useCallback(() => {
     const EXPORT_W = exportWidth
     const EXPORT_H = exportHeight
@@ -127,26 +153,51 @@ export function CanvasEditor({
     let loadedCount = 0
     const images: { img: HTMLImageElement; layer: Layer }[] = []
 
+    const renderFinalExport = () => {
+      visibleLayers.forEach((l) => {
+        if (l.type === "text") {
+          ctx.save()
+          const fontSize = l.fontSize ?? 48
+          ctx.font = `bold ${fontSize}px sans-serif`
+          ctx.fillStyle = l.color ?? "#000000"
+          ctx.textAlign = "center"
+          ctx.textBaseline = "middle"
+          const text = l.text || "Text"
+          const centerX = l.x + l.width / 2
+          const centerY = l.y + l.height / 2
+          ctx.fillText(text, centerX, centerY)
+          ctx.restore()
+        } else {
+          const found = images.find((item) => item.layer.id === l.id)
+          if (found) {
+            ctx.drawImage(found.img, l.x, l.y, l.width, l.height)
+          }
+        }
+      })
+      const link = document.createElement("a")
+      link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
+      link.href = canvas.toDataURL("image/png")
+      link.click()
+    }
+
     visibleLayers.forEach((layer) => {
-      const img = new Image()
-      img.crossOrigin = "anonymous"
-      img.onload = () => {
-        images.push({ img, layer })
+      if (layer.type === "text") {
         loadedCount++
         if (loadedCount === visibleLayers.length) {
-          visibleLayers.forEach((l) => {
-            const found = images.find((item) => item.layer.id === l.id)
-            if (found) {
-              ctx.drawImage(found.img, l.x, l.y, l.width, l.height)
-            }
-          })
-          const link = document.createElement("a")
-          link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
-          link.href = canvas.toDataURL("image/png")
-          link.click()
+          renderFinalExport()
         }
+      } else {
+        const img = new Image()
+        img.crossOrigin = "anonymous"
+        img.onload = () => {
+          images.push({ img, layer })
+          loadedCount++
+          if (loadedCount === visibleLayers.length) {
+            renderFinalExport()
+          }
+        }
+        img.src = layer.src
       }
-      img.src = layer.src
     })
   }, [layers, bgColor, exportWidth, exportHeight])
 
@@ -246,7 +297,7 @@ export function CanvasEditor({
     [scale],
   )
 
-  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split">("select")
+  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split" | "text">("select")
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -257,6 +308,18 @@ export function CanvasEditor({
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (activeTool === "text") {
+        e.stopPropagation()
+        const canvasEl = canvasRef.current
+        if (!canvasEl) return
+        const rect = canvasEl.getBoundingClientRect()
+        const clickX = Math.round((e.clientX - rect.left) / scale)
+        const clickY = Math.round((e.clientY - rect.top) / scale)
+        addTextLayer(clickX, clickY)
+        setActiveTool("select")
+        return
+      }
+
       if (activeTool === "select") {
         e.stopPropagation()
         const canvasEl = canvasRef.current
@@ -747,6 +810,10 @@ export function CanvasEditor({
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Upload</span>
           </Button>
+          <Button variant="outline" size="sm" onClick={() => addTextLayer()} title="Add Text Layer to Canvas">
+            <Type className="h-4 w-4" />
+            <span className="hidden sm:inline">Add Text</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExportCanvas} title={`Export top-left ${exportWidth}×${exportHeight} area as PNG`}>
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export ({exportWidth}×{exportHeight})</span>
@@ -847,6 +914,19 @@ export function CanvasEditor({
               title="Split Image Tool"
             >
               <Scissors className="h-4 w-4 text-sky-500 fill-sky-500/20" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7",
+                activeTool === "text" ? "bg-accent text-foreground" : "text-muted-foreground",
+              )}
+              onClick={() => setActiveTool("text")}
+              aria-label="Text Tool"
+              title="Text Tool (Click canvas to add text)"
+            >
+              <Type className="h-4 w-4 text-purple-500" />
             </Button>
           </div>
 
@@ -985,6 +1065,87 @@ export function CanvasEditor({
           </Button>
         </div>
       </header>
+
+      {/* Contextual Text Properties Bar */}
+      {selectedTextLayer && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs">
+          <div className="flex items-center gap-1.5 font-medium text-foreground shrink-0">
+            <Type className="h-4 w-4 text-purple-500" />
+            <span>Text Settings:</span>
+          </div>
+
+          {/* Text Content Input */}
+          <input
+            type="text"
+            value={selectedTextLayer.text || ""}
+            onChange={(e) => updateLayer(selectedTextLayer.id, { text: e.target.value })}
+            placeholder="Edit text content..."
+            className="h-7 w-52 rounded border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-selection"
+          />
+
+          <div className="h-4 w-px bg-border shrink-0" />
+
+          {/* Font Size Input */}
+          <div className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-0.5 shrink-0" title="Font Size (px)">
+            <span className="text-[10px] font-mono text-muted-foreground">Size:</span>
+            <input
+              type="number"
+              min={10}
+              max={300}
+              value={selectedTextLayer.fontSize ?? 48}
+              onChange={(e) => updateLayer(selectedTextLayer.id, { fontSize: Math.max(10, Math.min(300, Number(e.target.value) || 48)) })}
+              className="h-6 w-12 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+            />
+            <span className="text-[10px] text-muted-foreground">px</span>
+          </div>
+
+          {/* Quick Font Size Presets */}
+          <div className="hidden md:flex items-center gap-0.5 rounded border border-border bg-background p-0.5 shrink-0">
+            {[24, 36, 48, 64, 96, 128].map((size) => (
+              <button
+                key={size}
+                onClick={() => updateLayer(selectedTextLayer.id, { fontSize: size })}
+                className={cn(
+                  "h-6 px-1.5 text-[11px] font-mono rounded transition-colors hover:bg-accent",
+                  (selectedTextLayer.fontSize ?? 48) === size ? "bg-accent font-bold text-foreground" : "text-muted-foreground"
+                )}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+
+          <div className="h-4 w-px bg-border shrink-0" />
+
+          {/* Text Color Picker & Swatches */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-mono text-muted-foreground">Color:</span>
+            <label className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border p-0.5 shadow-sm hover:opacity-80" title="Custom Text Color">
+              <div className="h-full w-full rounded shadow-xs" style={{ backgroundColor: selectedTextLayer.color || "#000000" }} />
+              <input
+                type="color"
+                value={selectedTextLayer.color || "#000000"}
+                onChange={(e) => updateLayer(selectedTextLayer.id, { color: e.target.value })}
+                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
+              />
+            </label>
+            <div className="flex items-center gap-1 ml-0.5">
+              {["#000000", "#ffffff", "#ef4444", "#22c55e", "#0ea5e9", "#eab308", "#8b5cf6"].map((hex) => (
+                <button
+                  key={hex}
+                  onClick={() => updateLayer(selectedTextLayer.id, { color: hex })}
+                  className={cn(
+                    "h-5 w-5 rounded-full border border-border shadow-xs transition-transform hover:scale-110",
+                    (selectedTextLayer.color || "#000000") === hex && "ring-2 ring-selection ring-offset-1"
+                  )}
+                  style={{ backgroundColor: hex }}
+                  title={hex}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/* Canvas viewport */}

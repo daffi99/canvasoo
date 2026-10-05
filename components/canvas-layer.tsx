@@ -214,13 +214,27 @@ export function CanvasLayer({
       style={{ left: layer.x, top: layer.y, width: layer.width, height: layer.height }}
       onPointerDown={(e) => handlePointerDown(e, "move")}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={layer.src || "/placeholder.svg"}
-        alt={layer.name}
-        draggable={false}
-        className="pointer-events-none h-full w-full object-fill"
-      />
+      {layer.type === "text" ? (
+        <div
+          className="pointer-events-none flex h-full w-full items-center justify-center overflow-hidden select-none whitespace-pre-wrap text-center leading-tight break-words p-1"
+          style={{
+            fontSize: `${layer.fontSize ?? 48}px`,
+            color: layer.color ?? "#000000",
+            fontFamily: "sans-serif",
+            fontWeight: "bold",
+          }}
+        >
+          {layer.text || "Text"}
+        </div>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={layer.src || "/placeholder.svg"}
+          alt={layer.name}
+          draggable={false}
+          className="pointer-events-none h-full w-full object-fill"
+        />
+      )}
       {selected && (
         <span
           role="presentation"
