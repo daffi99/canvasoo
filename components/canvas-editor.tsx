@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw, Copy, Droplets, Crop } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw, Copy, Droplets, Crop, ClipboardCopy, Check } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -134,12 +134,24 @@ export function CanvasEditor({
     setSelectedIds([newTextLayer.id])
   }, [layers])
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+    setToastMessage(msg)
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null)
+    }, 2500)
+  }, [])
+
   const handleExportArea = useCallback(
-    (area?: { x: number; y: number; width: number; height: number; filenamePrefix?: string }) => {
+    (area?: { x: number; y: number; width: number; height: number; filenamePrefix?: string; copyToClipboard?: boolean }) => {
       const EXPORT_W = area ? Math.max(1, Math.round(area.width)) : exportWidth
       const EXPORT_H = area ? Math.max(1, Math.round(area.height)) : exportHeight
       const offsetX = area ? Math.round(area.x) : 0
       const offsetY = area ? Math.round(area.y) : 0
+      const copyToClipboard = area?.copyToClipboard ?? false
 
       const canvas = document.createElement("canvas")
       canvas.width = EXPORT_W
@@ -150,12 +162,38 @@ export function CanvasEditor({
       ctx.fillStyle = bgColor
       ctx.fillRect(0, 0, EXPORT_W, EXPORT_H)
 
+      const dispatchResult = () => {
+        if (copyToClipboard) {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              showToast("Failed to copy image")
+              return
+            }
+            if (navigator.clipboard && window.ClipboardItem) {
+              navigator.clipboard
+                .write([new ClipboardItem({ "image/png": blob })])
+                .then(() => {
+                  showToast("Copied area to clipboard! 📋")
+                })
+                .catch((err) => {
+                  console.error("Clipboard write error:", err)
+                  showToast("Clipboard access denied")
+                })
+            } else {
+              showToast("Clipboard API not supported in this browser")
+            }
+          }, "image/png")
+        } else {
+          const link = document.createElement("a")
+          link.download = `${area?.filenamePrefix || "canvas"}-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
+          link.href = canvas.toDataURL("image/png")
+          link.click()
+        }
+      }
+
       const visibleLayers = layers.filter((l) => l.visible)
       if (visibleLayers.length === 0) {
-        const link = document.createElement("a")
-        link.download = `${area?.filenamePrefix || "canvas"}-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
-        link.href = canvas.toDataURL("image/png")
-        link.click()
+        dispatchResult()
         return
       }
 
@@ -273,10 +311,7 @@ export function CanvasEditor({
           }
           ctx.restore()
         })
-        const link = document.createElement("a")
-        link.download = `${area?.filenamePrefix || "canvas"}-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
-        link.href = canvas.toDataURL("image/png")
-        link.click()
+        dispatchResult()
       }
 
       visibleLayers.forEach((layer) => {
@@ -299,44 +334,48 @@ export function CanvasEditor({
         }
       })
     },
-    [layers, bgColor, exportWidth, exportHeight],
+    [layers, bgColor, exportWidth, exportHeight, showToast],
   )
 
   const handleExportCanvas = useCallback(() => {
     handleExportArea()
   }, [handleExportArea])
 
-  const handleExportSelectedLayers = useCallback(() => {
-    if (selectedIds.length === 0) return
-    const selLayers = layers.filter((l) => selectedIds.includes(l.id) && l.visible)
-    if (selLayers.length === 0) return
+  const handleExportSelectedLayers = useCallback(
+    (options?: { copyToClipboard?: boolean }) => {
+      if (selectedIds.length === 0) return
+      const selLayers = layers.filter((l) => selectedIds.includes(l.id) && l.visible)
+      if (selLayers.length === 0) return
 
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
 
-    selLayers.forEach((l) => {
-      minX = Math.min(minX, l.x)
-      minY = Math.min(minY, l.y)
-      maxX = Math.max(maxX, l.x + l.width)
-      maxY = Math.max(maxY, l.y + l.height)
-    })
+      selLayers.forEach((l) => {
+        minX = Math.min(minX, l.x)
+        minY = Math.min(minY, l.y)
+        maxX = Math.max(maxX, l.x + l.width)
+        maxY = Math.max(maxY, l.y + l.height)
+      })
 
-    const padding = 12
-    const finalX = Math.max(0, Math.round(minX - padding))
-    const finalY = Math.max(0, Math.round(minY - padding))
-    const finalW = Math.round(maxX - minX + padding * 2)
-    const finalH = Math.round(maxY - minY + padding * 2)
+      const padding = 12
+      const finalX = Math.max(0, Math.round(minX - padding))
+      const finalY = Math.max(0, Math.round(minY - padding))
+      const finalW = Math.round(maxX - minX + padding * 2)
+      const finalH = Math.round(maxY - minY + padding * 2)
 
-    handleExportArea({
-      x: finalX,
-      y: finalY,
-      width: finalW,
-      height: finalH,
-      filenamePrefix: "selection",
-    })
-  }, [selectedIds, layers, handleExportArea])
+      handleExportArea({
+        x: finalX,
+        y: finalY,
+        width: finalW,
+        height: finalH,
+        filenamePrefix: "selection",
+        copyToClipboard: options?.copyToClipboard,
+      })
+    },
+    [selectedIds, layers, handleExportArea],
+  )
 
   const handleStartDragGuideline = useCallback(
     (type: "horizontal" | "vertical", e: React.PointerEvent) => {
@@ -434,7 +473,7 @@ export function CanvasEditor({
     [scale],
   )
 
-  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split" | "text" | "blur" | "export-area">("select")
+  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split" | "text" | "blur" | "export-area" | "copy-area">("select")
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -547,7 +586,9 @@ export function CanvasEditor({
                 ? "#818cf8"
                 : activeTool === "export-area"
                   ? "#06b6d4" // cyan-500 for export-area crop tool
-                  : "#0ea5e9" // blue-500 for split tool
+                  : activeTool === "copy-area"
+                    ? "#10b981" // emerald-500 for copy-area tool
+                    : "#0ea5e9" // blue-500 for split tool
       previewEl.style.display = "block"
       previewEl.style.borderColor = colorHex
       previewEl.style.backgroundColor =
@@ -555,7 +596,9 @@ export function CanvasEditor({
           ? "rgba(129, 140, 248, 0.15)"
           : activeTool === "export-area"
             ? "rgba(6, 182, 212, 0.12)"
-            : "transparent"
+            : activeTool === "copy-area"
+              ? "rgba(16, 185, 129, 0.12)"
+              : "transparent"
       previewEl.style.left = `${startX}px`
       previewEl.style.top = `${startY}px`
       previewEl.style.width = "0px"
@@ -694,6 +737,14 @@ export function CanvasEditor({
               width: latestRect.width,
               height: latestRect.height,
               filenamePrefix: "crop-export",
+            })
+          } else if (activeTool === "copy-area") {
+            handleExportArea({
+              x: latestRect.x,
+              y: latestRect.y,
+              width: latestRect.width,
+              height: latestRect.height,
+              copyToClipboard: true,
             })
           } else if (activeTool === "blur") {
             const newBlurLayer: Layer = {
@@ -1171,6 +1222,19 @@ export function CanvasEditor({
             >
               <Crop className="h-4 w-4 text-cyan-400" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "copy-area" ? "bg-background text-emerald-600 shadow-xs font-semibold dark:text-emerald-400" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setActiveTool("copy-area")}
+              aria-label="Copy Area to Clipboard Tool"
+              title="Copy Custom Area to Clipboard (Drag box on canvas to copy PNG to clipboard)"
+            >
+              <ClipboardCopy className="h-4 w-4 text-emerald-500" />
+            </Button>
           </div>
 
           <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
@@ -1571,11 +1635,21 @@ export function CanvasEditor({
               variant="outline"
               size="sm"
               className="h-7 px-2 gap-1 text-xs border-cyan-500/40 text-cyan-700 dark:text-cyan-300 shadow-2xs hover:bg-cyan-500/10"
-              onClick={handleExportSelectedLayers}
+              onClick={() => handleExportSelectedLayers()}
               title="Export bounding area of selected layer(s) as PNG"
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Export Selection</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 gap-1 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 shadow-2xs hover:bg-emerald-500/10"
+              onClick={() => handleExportSelectedLayers({ copyToClipboard: true })}
+              title="Copy bounding area of selected layer(s) to Clipboard"
+            >
+              <ClipboardCopy className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="hidden sm:inline">Copy Selection</span>
             </Button>
           </div>
         </div>
@@ -1737,6 +1811,14 @@ export function CanvasEditor({
           e.target.value = ""
         }}
       />
+
+      {/* Toast Notification Floating Pill */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-emerald-500/40 bg-background/95 px-4 py-2 text-xs font-semibold text-foreground shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <Check className="h-4 w-4 text-emerald-500" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   )
 }
