@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImageIcon, Trash2, PanelRightClose } from "lucide-react"
+import { ArrowDown, ArrowUp, Eye, EyeOff, ImageIcon, Trash2, PanelRightClose, Type, Droplets } from "lucide-react"
 import type { Layer } from "@/lib/editor-types"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -85,12 +85,18 @@ export function LayersPanel({
                   )}
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={layer.src || "/placeholder.svg"}
-                      alt=""
-                      className={cn("h-full w-full object-contain", !layer.visible && "opacity-30")}
-                    />
+                    {layer.type === "blur" ? (
+                      <Droplets className={cn("h-5 w-5 text-indigo-400", !layer.visible && "opacity-30")} />
+                    ) : layer.type === "text" ? (
+                      <Type className={cn("h-5 w-5 text-purple-400", !layer.visible && "opacity-30")} />
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={layer.src || "/placeholder.svg"}
+                        alt=""
+                        className={cn("h-full w-full object-contain", !layer.visible && "opacity-30")}
+                      />
+                    )}
                   </div>
 
                   <span className="flex-1 truncate text-sm text-foreground">{layer.name}</span>

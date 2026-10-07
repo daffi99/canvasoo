@@ -273,7 +273,16 @@ export function CanvasLayer({
       }}
       onPointerDown={(e) => handlePointerDown(e, "move")}
     >
-      {layer.type === "text" ? (
+      {layer.type === "blur" ? (
+        <div
+          className="pointer-events-none h-full w-full rounded-xs border border-white/20 bg-white/5 backdrop-blur-md shadow-xs"
+          style={{
+            backdropFilter: `blur(${layer.blurAmount ?? 16}px)`,
+            WebkitBackdropFilter: `blur(${layer.blurAmount ?? 16}px)`,
+            opacity: layer.opacity ?? 1,
+          }}
+        />
+      ) : layer.type === "text" ? (
         <div
           className="pointer-events-none flex h-full w-full items-start justify-start overflow-hidden select-none whitespace-pre-wrap text-left leading-tight break-words p-2"
           style={{
