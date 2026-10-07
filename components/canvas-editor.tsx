@@ -1814,7 +1814,7 @@ export function CanvasEditor({
 
       {/* Toast Notification Floating Pill */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-emerald-500/40 bg-background/95 px-4 py-2 text-xs font-semibold text-foreground shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-emerald-500/40 bg-background/95 px-4 py-2 text-xs font-semibold text-foreground shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
           <Check className="h-4 w-4 text-emerald-500" />
           <span>{toastMessage}</span>
         </div>
