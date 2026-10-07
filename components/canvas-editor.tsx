@@ -179,28 +179,83 @@ export function CanvasEditor({
           }
 
           if (l.type === "blur") {
-            const blurPx = l.blurAmount ?? 16
+            const blurPx = Math.max(1, Math.round(l.blurAmount ?? 16))
             const halfW = l.width / 2
             const halfH = l.height / 2
+            const srcX = Math.round(l.x - offsetX)
+            const srcY = Math.round(l.y - offsetY)
+            const srcW = Math.round(l.width)
+            const srcH = Math.round(l.height)
 
-            const tempCanvas = document.createElement("canvas")
-            tempCanvas.width = l.width
-            tempCanvas.height = l.height
-            const tempCtx = tempCanvas.getContext("2d")
+            // Clamp source rectangle to within export canvas dimensions
+            const clLeft = Math.max(0, Math.min(EXPORT_W, srcX))
+            const clTop = Math.max(0, Math.min(EXPORT_H, srcY))
+            const clRight = Math.max(0, Math.min(EXPORT_W, srcX + srcW))
+            const clBottom = Math.max(0, Math.min(EXPORT_H, srcY + srcH))
+            const clW = clRight - clLeft
+            const clH = clBottom - clTop
 
-            if (tempCtx) {
-              tempCtx.drawImage(canvas, l.x - offsetX, l.y - offsetY, l.width, l.height, 0, 0, l.width, l.height)
+            if (clW > 0 && clH > 0) {
+              const snapshotCanvas = document.createElement("canvas")
+              snapshotCanvas.width = clW
+              snapshotCanvas.height = clH
+              const snapCtx = snapshotCanvas.getContext("2d")
 
-              ctx.beginPath()
-              ctx.rect(-halfW, -halfH, l.width, l.height)
-              ctx.clip()
+              if (snapCtx) {
+                // Copy exact area from current export canvas
+                snapCtx.drawImage(canvas, clLeft, clTop, clW, clH, 0, 0, clW, clH)
 
-              ctx.filter = `blur(${blurPx}px)`
-              ctx.drawImage(tempCanvas, -halfW, -halfH, l.width, l.height)
-              ctx.filter = "none"
+                // Try native ctx.filter first
+                let usedFilter = false
+                try {
+                  const testCanvas = document.createElement("canvas")
+                  const testCtx = testCanvas.getContext("2d")
+                  if (testCtx && "filter" in testCtx) {
+                    snapCtx.filter = `blur(${blurPx}px)`
+                    snapCtx.drawImage(snapshotCanvas, 0, 0)
+                    snapCtx.filter = "none"
+                    usedFilter = true
+                  }
+                } catch {
+                  usedFilter = false
+                }
 
-              ctx.fillStyle = "rgba(255, 255, 255, 0.05)"
-              ctx.fillRect(-halfW, -halfH, l.width, l.height)
+                // If native filter didn't produce blur or is unsupported, do downscale-upscale bilateral blur
+                if (!usedFilter) {
+                  const scaleDownFactor = Math.max(0.05, Math.min(0.5, 4 / (blurPx + 4)))
+                  const dw = Math.max(2, Math.round(clW * scaleDownFactor))
+                  const dh = Math.max(2, Math.round(clH * scaleDownFactor))
+
+                  const downCanvas = document.createElement("canvas")
+                  downCanvas.width = dw
+                  downCanvas.height = dh
+                  const downCtx = downCanvas.getContext("2d")
+                  if (downCtx) {
+                    downCtx.imageSmoothingEnabled = true
+                    downCtx.imageSmoothingQuality = "high"
+                    downCtx.drawImage(snapshotCanvas, 0, 0, dw, dh)
+
+                    snapCtx.clearRect(0, 0, clW, clH)
+                    snapCtx.imageSmoothingEnabled = true
+                    snapCtx.imageSmoothingQuality = "high"
+                    snapCtx.drawImage(downCanvas, 0, 0, dw, dh, 0, 0, clW, clH)
+                  }
+                }
+
+                // Clip to the layer's bounding box and draw the blurred snapshot
+                ctx.beginPath()
+                ctx.rect(-halfW, -halfH, l.width, l.height)
+                ctx.clip()
+
+                // Draw blurred snapshot positioned correctly relative to layer center
+                const drawOffsetRelX = clLeft - (l.x - offsetX) - halfW
+                const drawOffsetRelY = clTop - (l.y - offsetY) - halfH
+                ctx.drawImage(snapshotCanvas, drawOffsetRelX, drawOffsetRelY)
+
+                // Frosted glass soft white tint
+                ctx.fillStyle = "rgba(255, 255, 255, 0.08)"
+                ctx.fillRect(-halfW, -halfH, l.width, l.height)
+              }
             }
           } else if (l.type === "text") {
             const fontSize = l.fontSize ?? 48
