@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw, Copy, Droplets } from "lucide-react"
+import { ClipboardPaste, Maximize, Minus, Plus, Trash2, Upload, Undo2, Redo2, MousePointer, Square, Scissors, Columns2, Rows2, Download, Palette, ImageIcon, FileText, Layers, Type, RotateCw, RotateCcw, Copy, Droplets, Crop } from "lucide-react"
 import { CANVAS_SIZE, type Layer, createId } from "@/lib/editor-types"
 import { CanvasLayer } from "@/components/canvas-layer"
 import { CanvasRuler } from "@/components/canvas-ruler"
@@ -134,117 +134,154 @@ export function CanvasEditor({
     setSelectedIds([newTextLayer.id])
   }, [layers])
 
-  const handleExportCanvas = useCallback(() => {
-    const EXPORT_W = exportWidth
-    const EXPORT_H = exportHeight
-    const canvas = document.createElement("canvas")
-    canvas.width = EXPORT_W
-    canvas.height = EXPORT_H
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+  const handleExportArea = useCallback(
+    (area?: { x: number; y: number; width: number; height: number; filenamePrefix?: string }) => {
+      const EXPORT_W = area ? Math.max(1, Math.round(area.width)) : exportWidth
+      const EXPORT_H = area ? Math.max(1, Math.round(area.height)) : exportHeight
+      const offsetX = area ? Math.round(area.x) : 0
+      const offsetY = area ? Math.round(area.y) : 0
 
-    ctx.fillStyle = bgColor
-    ctx.fillRect(0, 0, EXPORT_W, EXPORT_H)
+      const canvas = document.createElement("canvas")
+      canvas.width = EXPORT_W
+      canvas.height = EXPORT_H
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return
 
-    const visibleLayers = layers.filter((l) => l.visible)
-    if (visibleLayers.length === 0) {
-      const link = document.createElement("a")
-      link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
-      link.href = canvas.toDataURL("image/png")
-      link.click()
-      return
-    }
+      ctx.fillStyle = bgColor
+      ctx.fillRect(0, 0, EXPORT_W, EXPORT_H)
 
-    let loadedCount = 0
-    const images: { img: HTMLImageElement; layer: Layer }[] = []
+      const visibleLayers = layers.filter((l) => l.visible)
+      if (visibleLayers.length === 0) {
+        const link = document.createElement("a")
+        link.download = `${area?.filenamePrefix || "canvas"}-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
+        link.href = canvas.toDataURL("image/png")
+        link.click()
+        return
+      }
 
-    const renderFinalExport = () => {
-      visibleLayers.forEach((l) => {
-        const rotDeg = l.rotation || 0
-        const rotRad = (rotDeg * Math.PI) / 180
+      let loadedCount = 0
+      const images: { img: HTMLImageElement; layer: Layer }[] = []
 
-        ctx.save()
-        ctx.globalAlpha = l.opacity ?? 1
-        const centerX = l.x + l.width / 2
-        const centerY = l.y + l.height / 2
-        ctx.translate(centerX, centerY)
+      const renderFinalExport = () => {
+        visibleLayers.forEach((l) => {
+          const rotDeg = l.rotation || 0
+          const rotRad = (rotDeg * Math.PI) / 180
 
-        if (rotDeg !== 0) {
-          ctx.rotate(rotRad)
-        }
+          ctx.save()
+          ctx.globalAlpha = l.opacity ?? 1
+          // Adjust center coordinate relative to export origin (offsetX, offsetY)
+          const centerX = l.x - offsetX + l.width / 2
+          const centerY = l.y - offsetY + l.height / 2
+          ctx.translate(centerX, centerY)
 
-        if (l.type === "blur") {
-          const blurPx = l.blurAmount ?? 16
-          const halfW = l.width / 2
-          const halfH = l.height / 2
-
-          // Create temporary snapshot of the current canvas underneath
-          const tempCanvas = document.createElement("canvas")
-          tempCanvas.width = l.width
-          tempCanvas.height = l.height
-          const tempCtx = tempCanvas.getContext("2d")
-
-          if (tempCtx) {
-            // Copy the region from the main canvas onto the temp canvas
-            // Account for the center translation by referencing l.x and l.y in canvas space
-            tempCtx.drawImage(canvas, l.x, l.y, l.width, l.height, 0, 0, l.width, l.height)
-
-            // Clip the blur to the rotated layer's bounding box
-            ctx.beginPath()
-            ctx.rect(-halfW, -halfH, l.width, l.height)
-            ctx.clip()
-
-            // Draw with Gaussian blur filter
-            ctx.filter = `blur(${blurPx}px)`
-            ctx.drawImage(tempCanvas, -halfW, -halfH, l.width, l.height)
-            ctx.filter = "none"
-
-            // Slight frosted tint
-            ctx.fillStyle = "rgba(255, 255, 255, 0.05)"
-            ctx.fillRect(-halfW, -halfH, l.width, l.height)
+          if (rotDeg !== 0) {
+            ctx.rotate(rotRad)
           }
-        } else if (l.type === "text") {
-          const fontSize = l.fontSize ?? 48
-          ctx.font = `bold ${fontSize}px sans-serif`
-          ctx.fillStyle = l.color ?? "#000000"
-          ctx.textAlign = "left"
-          ctx.textBaseline = "top"
-          const text = l.text || "Text"
-          ctx.fillText(text, -l.width / 2 + 8, -l.height / 2 + 8)
-        } else {
-          const found = images.find((item) => item.layer.id === l.id)
-          if (found) {
-            ctx.drawImage(found.img, -l.width / 2, -l.height / 2, l.width, l.height)
-          }
-        }
-        ctx.restore()
-      })
-      const link = document.createElement("a")
-      link.download = `canvas-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
-      link.href = canvas.toDataURL("image/png")
-      link.click()
-    }
 
-    visibleLayers.forEach((layer) => {
-      if (layer.type === "text" || layer.type === "blur") {
-        loadedCount++
-        if (loadedCount === visibleLayers.length) {
-          renderFinalExport()
-        }
-      } else {
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.onload = () => {
-          images.push({ img, layer })
+          if (l.type === "blur") {
+            const blurPx = l.blurAmount ?? 16
+            const halfW = l.width / 2
+            const halfH = l.height / 2
+
+            const tempCanvas = document.createElement("canvas")
+            tempCanvas.width = l.width
+            tempCanvas.height = l.height
+            const tempCtx = tempCanvas.getContext("2d")
+
+            if (tempCtx) {
+              tempCtx.drawImage(canvas, l.x - offsetX, l.y - offsetY, l.width, l.height, 0, 0, l.width, l.height)
+
+              ctx.beginPath()
+              ctx.rect(-halfW, -halfH, l.width, l.height)
+              ctx.clip()
+
+              ctx.filter = `blur(${blurPx}px)`
+              ctx.drawImage(tempCanvas, -halfW, -halfH, l.width, l.height)
+              ctx.filter = "none"
+
+              ctx.fillStyle = "rgba(255, 255, 255, 0.05)"
+              ctx.fillRect(-halfW, -halfH, l.width, l.height)
+            }
+          } else if (l.type === "text") {
+            const fontSize = l.fontSize ?? 48
+            ctx.font = `bold ${fontSize}px sans-serif`
+            ctx.fillStyle = l.color ?? "#000000"
+            ctx.textAlign = "left"
+            ctx.textBaseline = "top"
+            const text = l.text || "Text"
+            ctx.fillText(text, -l.width / 2 + 8, -l.height / 2 + 8)
+          } else {
+            const found = images.find((item) => item.layer.id === l.id)
+            if (found) {
+              ctx.drawImage(found.img, -l.width / 2, -l.height / 2, l.width, l.height)
+            }
+          }
+          ctx.restore()
+        })
+        const link = document.createElement("a")
+        link.download = `${area?.filenamePrefix || "canvas"}-${EXPORT_W}x${EXPORT_H}-${Date.now()}.png`
+        link.href = canvas.toDataURL("image/png")
+        link.click()
+      }
+
+      visibleLayers.forEach((layer) => {
+        if (layer.type === "text" || layer.type === "blur") {
           loadedCount++
           if (loadedCount === visibleLayers.length) {
             renderFinalExport()
           }
+        } else {
+          const img = new Image()
+          img.crossOrigin = "anonymous"
+          img.onload = () => {
+            images.push({ img, layer })
+            loadedCount++
+            if (loadedCount === visibleLayers.length) {
+              renderFinalExport()
+            }
+          }
+          img.src = layer.src
         }
-        img.src = layer.src
-      }
+      })
+    },
+    [layers, bgColor, exportWidth, exportHeight],
+  )
+
+  const handleExportCanvas = useCallback(() => {
+    handleExportArea()
+  }, [handleExportArea])
+
+  const handleExportSelectedLayers = useCallback(() => {
+    if (selectedIds.length === 0) return
+    const selLayers = layers.filter((l) => selectedIds.includes(l.id) && l.visible)
+    if (selLayers.length === 0) return
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    selLayers.forEach((l) => {
+      minX = Math.min(minX, l.x)
+      minY = Math.min(minY, l.y)
+      maxX = Math.max(maxX, l.x + l.width)
+      maxY = Math.max(maxY, l.y + l.height)
     })
-  }, [layers, bgColor, exportWidth, exportHeight])
+
+    const padding = 12
+    const finalX = Math.max(0, Math.round(minX - padding))
+    const finalY = Math.max(0, Math.round(minY - padding))
+    const finalW = Math.round(maxX - minX + padding * 2)
+    const finalH = Math.round(maxY - minY + padding * 2)
+
+    handleExportArea({
+      x: finalX,
+      y: finalY,
+      width: finalW,
+      height: finalH,
+      filenamePrefix: "selection",
+    })
+  }, [selectedIds, layers, handleExportArea])
 
   const handleStartDragGuideline = useCallback(
     (type: "horizontal" | "vertical", e: React.PointerEvent) => {
@@ -342,7 +379,7 @@ export function CanvasEditor({
     [scale],
   )
 
-  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split" | "text" | "blur">("select")
+  const [activeTool, setActiveTool] = useState<"select" | "rect-red" | "rect-green" | "rect-yellow" | "split" | "text" | "blur" | "export-area">("select")
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -453,10 +490,17 @@ export function CanvasEditor({
               ? "#eab308"
               : activeTool === "blur"
                 ? "#818cf8"
-                : "#0ea5e9" // blue-500 for split tool
+                : activeTool === "export-area"
+                  ? "#06b6d4" // cyan-500 for export-area crop tool
+                  : "#0ea5e9" // blue-500 for split tool
       previewEl.style.display = "block"
       previewEl.style.borderColor = colorHex
-      previewEl.style.backgroundColor = activeTool === "blur" ? "rgba(129, 140, 248, 0.15)" : "transparent"
+      previewEl.style.backgroundColor =
+        activeTool === "blur"
+          ? "rgba(129, 140, 248, 0.15)"
+          : activeTool === "export-area"
+            ? "rgba(6, 182, 212, 0.12)"
+            : "transparent"
       previewEl.style.left = `${startX}px`
       previewEl.style.top = `${startY}px`
       previewEl.style.width = "0px"
@@ -588,6 +632,14 @@ export function CanvasEditor({
               }
               img.src = layerToSplit.src
             }
+          } else if (activeTool === "export-area") {
+            handleExportArea({
+              x: latestRect.x,
+              y: latestRect.y,
+              width: latestRect.width,
+              height: latestRect.height,
+              filenamePrefix: "crop-export",
+            })
           } else if (activeTool === "blur") {
             const newBlurLayer: Layer = {
               id: createId(),
@@ -958,14 +1010,14 @@ export function CanvasEditor({
             </Button>
           </div>
 
-          {/* Tool Selector Group */}
-          <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
+          {/* Tool Selector Group - Modern Segmented Control */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 shadow-2xs">
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "select" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "select" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("select")}
               aria-label="Select Tool"
@@ -977,8 +1029,8 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "rect-red" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "rect-red" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("rect-red")}
               aria-label="Red Rectangle Tool"
@@ -990,8 +1042,8 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "rect-green" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "rect-green" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("rect-green")}
               aria-label="Green Rectangle Tool"
@@ -1003,8 +1055,8 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "rect-yellow" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "rect-yellow" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("rect-yellow")}
               aria-label="Yellow Rectangle Tool"
@@ -1016,8 +1068,8 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "split" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "split" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("split")}
               aria-label="Split Image Tool"
@@ -1029,8 +1081,8 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "text" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "text" ? "bg-background text-purple-600 shadow-xs font-semibold dark:text-purple-400" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("text")}
               aria-label="Text Tool"
@@ -1042,14 +1094,27 @@ export function CanvasEditor({
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
-                activeTool === "blur" ? "bg-accent text-foreground" : "text-muted-foreground",
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "blur" ? "bg-background text-indigo-600 shadow-xs font-semibold dark:text-indigo-400" : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => setActiveTool("blur")}
               aria-label="Blur Rectangle Tool"
               title="Rectangle Blur Tool (Drag on canvas to blur area)"
             >
               <Droplets className="h-4 w-4 text-indigo-400 fill-indigo-400/20" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md transition-all",
+                activeTool === "export-area" ? "bg-background text-cyan-600 shadow-xs font-semibold dark:text-cyan-400" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setActiveTool("export-area")}
+              aria-label="Export Area Tool"
+              title="Export Custom Area (Drag box on canvas to download cropped PNG)"
+            >
+              <Crop className="h-4 w-4 text-cyan-400" />
             </Button>
           </div>
 
@@ -1192,12 +1257,12 @@ export function CanvasEditor({
 
       {/* Contextual Layer Properties Bar */}
       {selectedIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/80 bg-muted/30 px-3 py-1.5 text-xs backdrop-blur-sm">
           {selectedTextLayer && (
-            <>
-              <div className="flex items-center gap-1.5 font-medium text-foreground shrink-0">
-                <Type className="h-4 w-4 text-purple-500" />
-                <span>Text:</span>
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2 py-1 shadow-2xs">
+              <div className="flex items-center gap-1 font-medium text-foreground shrink-0">
+                <Type className="h-3.5 w-3.5 text-purple-500" />
+                <span className="text-[11px]">Text</span>
               </div>
 
               {/* Text Content Input */}
@@ -1205,35 +1270,34 @@ export function CanvasEditor({
                 type="text"
                 value={selectedTextLayer.text || ""}
                 onChange={(e) => updateLayer(selectedTextLayer.id, { text: e.target.value })}
-                placeholder="Edit text content..."
-                className="h-7 w-48 rounded border border-border bg-background px-2.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-selection"
+                placeholder="Edit text..."
+                className="h-6 w-40 rounded border border-border bg-muted/20 px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-selection"
               />
 
-              <div className="h-4 w-px bg-border shrink-0" />
+              <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
               {/* Font Size Input */}
-              <div className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-0.5 shrink-0" title="Font Size (px)">
-                <span className="text-[10px] font-mono text-muted-foreground">Size:</span>
+              <div className="flex items-center gap-1" title="Font Size (px)">
+                <span className="text-[10px] font-mono text-muted-foreground">Size</span>
                 <input
                   type="number"
                   min={10}
                   max={300}
                   value={selectedTextLayer.fontSize ?? 48}
                   onChange={(e) => updateLayer(selectedTextLayer.id, { fontSize: Math.max(10, Math.min(300, Number(e.target.value) || 48)) })}
-                  className="h-6 w-12 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                  className="h-6 w-11 rounded border border-border bg-muted/20 text-center text-xs font-mono font-bold text-foreground outline-none"
                 />
-                <span className="text-[10px] text-muted-foreground">px</span>
               </div>
 
               {/* Quick Font Size Presets */}
-              <div className="hidden lg:flex items-center gap-0.5 rounded border border-border bg-background p-0.5 shrink-0">
-                {[24, 36, 48, 64, 96, 128].map((size) => (
+              <div className="hidden lg:flex items-center gap-0.5 shrink-0">
+                {[24, 36, 48, 64, 96].map((size) => (
                   <button
                     key={size}
                     onClick={() => updateLayer(selectedTextLayer.id, { fontSize: size })}
                     className={cn(
-                      "h-6 px-1.5 text-[11px] font-mono rounded transition-colors hover:bg-accent",
-                      (selectedTextLayer.fontSize ?? 48) === size ? "bg-accent font-bold text-foreground" : "text-muted-foreground"
+                      "h-5 px-1.5 text-[10px] font-mono rounded transition-colors hover:bg-accent",
+                      (selectedTextLayer.fontSize ?? 48) === size ? "bg-accent font-bold text-foreground shadow-2xs" : "text-muted-foreground"
                     )}
                   >
                     {size}
@@ -1241,13 +1305,12 @@ export function CanvasEditor({
                 ))}
               </div>
 
-              <div className="h-4 w-px bg-border shrink-0" />
+              <div className="h-3.5 w-px bg-border/60 shrink-0" />
 
               {/* Text Color Picker & Swatches */}
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[10px] font-mono text-muted-foreground">Color:</span>
-                <label className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded border border-border p-0.5 shadow-sm hover:opacity-80" title="Custom Text Color">
-                  <div className="h-full w-full rounded shadow-xs" style={{ backgroundColor: selectedTextLayer.color || "#000000" }} />
+                <label className="relative flex h-5 w-5 cursor-pointer items-center justify-center rounded border border-border p-0.5 shadow-2xs hover:scale-105 transition-transform" title="Custom Text Color">
+                  <div className="h-full w-full rounded-sm" style={{ backgroundColor: selectedTextLayer.color || "#000000" }} />
                   <input
                     type="color"
                     value={selectedTextLayer.color || "#000000"}
@@ -1255,13 +1318,13 @@ export function CanvasEditor({
                     className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
                   />
                 </label>
-                <div className="flex items-center gap-1 ml-0.5">
+                <div className="flex items-center gap-1">
                   {["#000000", "#ffffff", "#ef4444", "#22c55e", "#0ea5e9", "#eab308", "#8b5cf6"].map((hex) => (
                     <button
                       key={hex}
                       onClick={() => updateLayer(selectedTextLayer.id, { color: hex })}
                       className={cn(
-                        "h-5 w-5 rounded-full border border-border shadow-xs transition-transform hover:scale-110",
+                        "h-4 w-4 rounded-full border border-border/80 shadow-2xs transition-transform hover:scale-115",
                         (selectedTextLayer.color || "#000000") === hex && "ring-2 ring-selection ring-offset-1"
                       )}
                       style={{ backgroundColor: hex }}
@@ -1270,21 +1333,18 @@ export function CanvasEditor({
                   ))}
                 </div>
               </div>
-
-              <div className="h-4 w-px bg-border shrink-0" />
-            </>
+            </div>
           )}
 
           {selectedBlurLayer && (
-            <>
-              <div className="flex items-center gap-1.5 font-medium text-foreground shrink-0">
-                <Droplets className="h-4 w-4 text-indigo-400" />
-                <span>Blur Settings:</span>
+            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2 py-1 shadow-2xs">
+              <div className="flex items-center gap-1 font-medium text-foreground shrink-0">
+                <Droplets className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="text-[11px]">Blur</span>
               </div>
 
-              {/* Blur Intensity Slider & Number Input */}
-              <div className="flex items-center gap-1.5 shrink-0" title="Blur Intensity (px)">
-                <span className="text-[10px] font-mono text-muted-foreground">Blur:</span>
+              {/* Modern Blur Intensity Slider */}
+              <div className="flex items-center gap-2 shrink-0" title="Blur Intensity (px)">
                 <input
                   type="range"
                   min={2}
@@ -1292,9 +1352,9 @@ export function CanvasEditor({
                   step={1}
                   value={selectedBlurLayer.blurAmount ?? 16}
                   onChange={(e) => updateLayer(selectedBlurLayer.id, { blurAmount: Number(e.target.value) })}
-                  className="h-1.5 w-20 cursor-pointer accent-indigo-500"
+                  className="modern-slider w-20"
                 />
-                <div className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5">
+                <div className="flex items-center rounded border border-border bg-muted/20 px-1 py-0.5">
                   <input
                     type="number"
                     min={1}
@@ -1304,39 +1364,37 @@ export function CanvasEditor({
                       const val = Math.max(1, Math.min(100, Number(e.target.value) || 16))
                       updateLayer(selectedBlurLayer.id, { blurAmount: val })
                     }}
-                    className="h-5 w-8 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                    className="h-4 w-7 text-center text-[11px] font-mono font-bold bg-transparent text-foreground outline-none"
                   />
-                  <span className="text-[10px] text-muted-foreground">px</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">px</span>
                 </div>
               </div>
 
               {/* Blur Quick Presets */}
-              <div className="hidden sm:flex items-center gap-0.5 rounded border border-border bg-background p-0.5 shrink-0">
+              <div className="hidden sm:flex items-center gap-0.5 shrink-0">
                 {[8, 16, 24, 40].map((amount) => (
                   <button
                     key={amount}
                     onClick={() => updateLayer(selectedBlurLayer.id, { blurAmount: amount })}
                     className={cn(
-                      "h-6 px-1.5 text-[11px] font-mono rounded transition-colors hover:bg-accent",
-                      (selectedBlurLayer.blurAmount ?? 16) === amount ? "bg-accent font-bold text-foreground" : "text-muted-foreground"
+                      "h-5 px-1.5 text-[10px] font-mono rounded transition-colors hover:bg-accent",
+                      (selectedBlurLayer.blurAmount ?? 16) === amount ? "bg-accent font-bold text-foreground shadow-2xs" : "text-muted-foreground"
                     )}
                   >
                     {amount}px
                   </button>
                 ))}
               </div>
-
-              <div className="h-4 w-px bg-border shrink-0" />
-            </>
+            </div>
           )}
 
-          {/* Rotation Controls for Selected Layer(s) */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] font-mono text-muted-foreground">Rotate:</span>
+          {/* Rotation Controls Card */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/80 px-2 py-1 shadow-2xs shrink-0">
+            <span className="text-[10px] font-mono text-muted-foreground">Rotate</span>
             <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 gap-1 text-xs"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded text-muted-foreground hover:text-foreground"
               onClick={() => {
                 selectedIds.forEach((id) => {
                   const l = layers.find((item) => item.id === id)
@@ -1346,14 +1404,14 @@ export function CanvasEditor({
                 })
               }}
               title="Rotate 90° Counter-Clockwise"
+              aria-label="Rotate -90 deg"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">-90°</span>
             </Button>
             <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 gap-1 text-xs"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded text-muted-foreground hover:text-foreground"
               onClick={() => {
                 selectedIds.forEach((id) => {
                   const l = layers.find((item) => item.id === id)
@@ -1363,16 +1421,16 @@ export function CanvasEditor({
                 })
               }}
               title="Rotate 90° Clockwise"
+              aria-label="Rotate +90 deg"
             >
               <RotateCw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">+90°</span>
             </Button>
 
             {selectedIds.length === 1 && (() => {
               const selLayer = layers.find((l) => l.id === selectedIds[0])
               if (!selLayer) return null
               return (
-                <div className="flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5" title="Exact rotation angle (degrees)">
+                <div className="flex items-center rounded border border-border bg-muted/20 px-1 py-0.5" title="Exact rotation angle (degrees)">
                   <input
                     type="number"
                     min={0}
@@ -1382,7 +1440,7 @@ export function CanvasEditor({
                       const val = Number(e.target.value) || 0
                       updateLayer(selLayer.id, { rotation: ((val % 360) + 360) % 360 })
                     }}
-                    className="h-5 w-10 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                    className="h-4 w-8 text-center text-[11px] font-mono font-bold bg-transparent text-foreground outline-none"
                   />
                   <span className="text-[10px] text-muted-foreground">°</span>
                 </div>
@@ -1390,11 +1448,9 @@ export function CanvasEditor({
             })()}
           </div>
 
-          <div className="h-4 w-px bg-border shrink-0" />
-
-          {/* Opacity Controls for Selected Layer(s) */}
-          <div className="flex items-center gap-1.5 shrink-0" title="Opacity (0% - 100%)">
-            <span className="text-[10px] font-mono text-muted-foreground">Opacity:</span>
+          {/* Opacity Controls Card */}
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/80 px-2 py-1 shadow-2xs shrink-0" title="Opacity (0% - 100%)">
+            <span className="text-[10px] font-mono text-muted-foreground">Opacity</span>
             {selectedIds.length === 1 && (() => {
               const selLayer = layers.find((l) => l.id === selectedIds[0])
               if (!selLayer) return null
@@ -1408,9 +1464,9 @@ export function CanvasEditor({
                     step={5}
                     value={currentOpacity}
                     onChange={(e) => updateLayer(selLayer.id, { opacity: Number(e.target.value) / 100 })}
-                    className="h-1.5 w-16 cursor-pointer accent-selection"
+                    className="modern-slider w-16"
                   />
-                  <div className="flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5">
+                  <div className="flex items-center rounded border border-border bg-muted/20 px-1 py-0.5">
                     <input
                       type="number"
                       min={0}
@@ -1420,7 +1476,7 @@ export function CanvasEditor({
                         const val = Math.max(0, Math.min(100, Number(e.target.value) || 0))
                         updateLayer(selLayer.id, { opacity: val / 100 })
                       }}
-                      className="h-5 w-8 text-center text-xs font-mono font-bold bg-transparent text-foreground outline-none"
+                      className="h-4 w-7 text-center text-[11px] font-mono font-bold bg-transparent text-foreground outline-none"
                     />
                     <span className="text-[10px] text-muted-foreground">%</span>
                   </div>
@@ -1428,14 +1484,14 @@ export function CanvasEditor({
               )
             })()}
             {selectedIds.length > 1 && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 {[25, 50, 75, 100].map((percent) => (
                   <button
                     key={percent}
                     onClick={() => {
                       selectedIds.forEach((id) => updateLayer(id, { opacity: percent / 100 }))
                     }}
-                    className="h-6 px-1.5 text-[11px] font-mono rounded border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="h-5 px-1.5 text-[10px] font-mono rounded border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
                   >
                     {percent}%
                   </button>
@@ -1444,19 +1500,29 @@ export function CanvasEditor({
             )}
           </div>
 
-          <div className="h-4 w-px bg-border shrink-0" />
-
-          {/* Duplicate Action Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 gap-1 text-xs"
-            onClick={duplicateSelectedLayers}
-            title="Duplicate Selected Layer(s) (Cmd+D / Ctrl+D)"
-          >
-            <Copy className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Duplicate</span>
-          </Button>
+          {/* Action Buttons: Duplicate & Export Selection */}
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 gap-1 text-xs shadow-2xs hover:bg-accent"
+              onClick={duplicateSelectedLayers}
+              title="Duplicate Selected Layer(s) (Cmd+D / Ctrl+D)"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Duplicate</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 gap-1 text-xs border-cyan-500/40 text-cyan-700 dark:text-cyan-300 shadow-2xs hover:bg-cyan-500/10"
+              onClick={handleExportSelectedLayers}
+              title="Export bounding area of selected layer(s) as PNG"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Export Selection</span>
+            </Button>
+          </div>
         </div>
       )}
 
